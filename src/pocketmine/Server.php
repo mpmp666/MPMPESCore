@@ -392,7 +392,7 @@ class Server{
 	 * @return string
 	 */
 	public function getName() : string{
-		return "Genisys";
+		return "MPMPESCore";
 	}
 
 	/**
@@ -1775,7 +1775,9 @@ class Server{
 
 			$this->aboutstring = "\n
 		   §5PocketMine-iTX §3Genisys §fis a fork of PocketMine-MP, made by §5iTX Technologies LLC§f.
+		   §fThis core (§6MPMPESCore§f) is a modified build based on §3Genisys§f by mpmpes.
 		   §fVersion: §6" . $this->getPocketMineVersion() . "
+		   §fPHP Version: §6" . PHP_VERSION . " (" . (PHP_ZTS ? "ZTS" : "NTS") . ")" . "
 		   §fTarget client Version: §d" . \pocketmine\MINECRAFT_VERSION . "
 		   §fLatest source code is available at https://github.com/iTXTech/Genisys
 		   §fDonate link: http://pl.zxda.net/plugins/203.html

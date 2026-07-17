@@ -96,9 +96,23 @@ namespace pocketmine {
 		@define('pocketmine\PATH', \getcwd() . DIRECTORY_SEPARATOR);
 	}
 
-	if(version_compare("7.0", PHP_VERSION) > 0){
-		echo "[CRITICAL] You must use PHP >= 7.0" . PHP_EOL;
-		echo "[CRITICAL] Please use the installer provided on the homepage." . PHP_EOL;
+	if(version_compare("8.0", PHP_VERSION) > 0){
+		echo "[CRITICAL] 本版本为真多线程移植版, 必须使用 PHP >= 8.0, 当前: " . PHP_VERSION . PHP_EOL;
+		echo "[CRITICAL] 请使用 bin/php7/bin/php 启动。" . PHP_EOL;
+		exit(1);
+	}
+
+	//真多线程前提: 必须是 ZTS(线程安全)构建
+	if(!(defined("ZEND_THREAD_SAFE") && ZEND_THREAD_SAFE) && !PHP_ZTS){
+		echo "[CRITICAL] 当前 PHP 不是 ZTS(线程安全)构建, 无法启用真多线程。" . PHP_EOL;
+		echo "[CRITICAL] 请使用 bin/php7/bin/php (PHP 8.x ZTS)。" . PHP_EOL;
+		exit(1);
+	}
+
+	//真多线程前提: 必须加载 pmmpthread 扩展
+	if(!extension_loaded("pmmpthread") && !extension_loaded("pthreads")){
+		echo "[CRITICAL] 未找到 pmmpthread 扩展, 无法启用真多线程。" . PHP_EOL;
+		echo "[CRITICAL] 请使用 bin/php7/bin/php (内置 pmmpthread)。" . PHP_EOL;
 		exit(1);
 	}
 
@@ -120,6 +134,8 @@ namespace pocketmine {
 
 	gc_enable();
 	error_reporting(-1);
+	//屏蔽 PHP 8.4 弃用警告(strlen(null)/float->int/隐式可空参数/ArrayAccess 返回类型等), 避免刷屏
+	error_reporting(E_ALL & ~E_DEPRECATED);
 	ini_set("allow_url_fopen", 1);
 	ini_set("display_errors", 1);
 	ini_set("display_startup_errors", 1);

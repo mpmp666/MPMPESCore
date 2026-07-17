@@ -72,13 +72,13 @@ server:
  #是否进行移动检测(不再拉回了)
  check-movement: true
  #是否限制创造某些功能(禁止丢物品, 禁止操作箱子等等)
- limited-creative: true
+ limited-creative: false
  #是否开启方块破坏粒子
  destroy-block-particle: true
  #是否允许喷溅型药水
  allow-splash-potion: true
  #是否启用高级指令选择器
- advanced-command-selector: false
+ advanced-command-selector: true
 
 redstone:
  ##############################
@@ -86,7 +86,7 @@ redstone:
  ##############################
  #如果不改为true将无法使用红石#
  ##############################
- enable: false
+ enable: true
  #是否允许频率脉冲
  frequency-pulse: false
  #设置脉冲频率, 默认: 1s
@@ -120,7 +120,7 @@ dserver:
  
 ai:
  #AI总开关
- enable: false
+ enable: true
  #僵尸的AI，0为关闭，1为1.0版AI，2为新AI（不完善）
  zombie: 1
  #僵尸猪人的AI
@@ -144,4 +144,4 @@ ai:
  #苦力怕爆炸是否破坏方块
  creeper-explode-destroy-block: false
  #是否允许自动生成生物
- mobgenerate: false
+ mobgenerate: true
