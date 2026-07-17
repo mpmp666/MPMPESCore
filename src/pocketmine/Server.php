@@ -1586,9 +1586,9 @@ class Server{
 	}
 
 	/**
-	 * @return Server
+	 * @return Server|null
 	 */
-	public static function getInstance() : Server{
+	public static function getInstance() : ?Server{
 		return self::$instance;
 	}
 

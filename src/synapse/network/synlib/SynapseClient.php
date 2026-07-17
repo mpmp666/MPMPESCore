@@ -29,8 +29,8 @@ class SynapseClient extends Thread{
 		$this->setClassLoader($loader);
 
 		$this->shutdown = false;
-		$this->externalQueue = new \Threaded;
-		$this->internalQueue = new \Threaded;
+		$this->externalQueue = new \Volatile;
+		$this->internalQueue = new \Volatile;
 
 		if(\Phar::running(true) !== ""){
 			$this->mainPath = \Phar::running(true);

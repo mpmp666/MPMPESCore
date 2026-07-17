@@ -28,7 +28,7 @@ use pocketmine\Server;
  *
  * WARNING: Do not call PocketMine-MP API methods, or save objects from/on other Threads!!
  */
-abstract class AsyncTask extends \Threaded implements \Collectable{
+abstract class AsyncTask extends \Runnable implements \Collectable{
 
 	/** @var AsyncWorker $worker */
 	public $worker = null;
@@ -57,7 +57,7 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 		return $this->isFinished;
 	}
 
-	public function run(){
+	public function run() : void{
 		$this->result = null;
 		$this->isGarbage = false;
 
@@ -164,6 +164,11 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 
 	public function cleanObject(){
 		foreach($this as $p => $v){
+			// pmmpthread stores internal state in "\0"-prefixed properties;
+			// skip those (PHP 8 forbids direct access to "\0" keys).
+			if(is_string($p) and $p !== "" and $p[0] === "\0"){
+				continue;
+			}
 			if(!($v instanceof \Threaded) and !in_array($p, ["isFinished", "isGarbage", "cancelRun"])){
 				$this->{$p} = null;
 			}

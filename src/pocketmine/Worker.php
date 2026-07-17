@@ -22,7 +22,11 @@ abstract class Worker extends \Worker{
 
 	public function setClassLoader(?\ClassLoader $loader = null){
 		if($loader === null){
-			$loader = Server::getInstance()->getLoader();
+			$server = Server::getInstance();
+			if($server === null){
+				return;
+			}
+			$loader = $server->getLoader();
 		}
 		$this->classLoader = $loader;
 	}
@@ -39,7 +43,7 @@ abstract class Worker extends \Worker{
 	}
 
 	public function onStart(){
-		if($this->getClassLoader() === null){
+		if($this->getClassLoader() === null and Server::getInstance() !== null){
 			$this->setClassLoader();
 		}
 		$this->registerClassLoader();

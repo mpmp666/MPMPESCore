@@ -23,13 +23,14 @@ class RakLibServer extends \Thread{
     protected $logger;
     protected $loader;
 
+    /** @var \Volatile */
     public $loadPaths;
 
     protected $shutdown;
 
-    /** @var \Threaded */
+    /** @var \Volatile */
     protected $externalQueue;
-    /** @var \Threaded */
+    /** @var \Volatile */
     protected $internalQueue;
 
 	protected $mainPath;
@@ -54,11 +55,14 @@ class RakLibServer extends \Thread{
         $loadPaths = [];
         $this->addDependency($loadPaths, new \ReflectionClass($logger));
         $this->addDependency($loadPaths, new \ReflectionClass($loader));
-        $this->loadPaths = array_reverse($loadPaths);
+        $this->loadPaths = new \Volatile;
+        foreach(array_reverse($loadPaths) as $name => $path){
+            $this->loadPaths[$name] = $path;
+        }
         $this->shutdown = false;
 
-        $this->externalQueue = new \Threaded;
-        $this->internalQueue = new \Threaded;
+        $this->externalQueue = new \Volatile;
+        $this->internalQueue = new \Volatile;
 
 	    if(\Phar::running(true) !== ""){
 		    $this->mainPath = \Phar::running(true);
@@ -68,36 +72,46 @@ class RakLibServer extends \Thread{
         $this->start();
     }
 
-    /** PHP 8.5 port: replaces blocking run() loop. Sets up socket + SessionManager. */
-    public function onStart(){
+    /**
+     * Real thread entry point (pmmp\thread\Thread::run).
+     *
+     * pmmpthread 6.x forbids storing non-thread-safe objects (e.g. SessionManager,
+     * a plain class) in a thread-safe class property — assigning one throws
+     * NonThreadSafeValueError. So we keep $sessionManager as a LOCAL variable
+     * inside run() (which executes entirely in the child thread), not a property.
+     * The network loop and SessionManager lifetime both live here.
+     */
+    public function run() : void{
         try{
-        foreach($this->loadPaths as $name => $path){
-            if(!class_exists($name, false) and !interface_exists($name, false)){
-                require($path);
+            // INHERIT_ALL already shares class definitions with the child, but
+            // re-registering the injected autoloader is still safe & cheap.
+            if($this->loader !== null){
+                $this->loader->register(true);
             }
-        }
-        $this->loader->register(true);
-        gc_enable();
-        error_reporting(-1);
-        ini_set("display_errors", 1);
-        ini_set("display_startup_errors", 1);
-        set_error_handler([$this, "errorHandler"], E_ALL);
-        register_shutdown_function([$this, "shutdownHandler"]);
-        $socket = new UDPServerSocket($this->getLogger(), $this->port, $this->interface);
-        $this->sessionManager = new SessionManager($this, $socket);
-        }catch(\Throwable $e){
-            fwrite(STDERR, "\n=== RAKLIB onStart THROW ===\n");
-            fwrite(STDERR, get_class($e).": ".$e->getMessage()."\n");
-            fwrite(STDERR, "File: ".$e->getFile().":".$e->getLine()."\n");
-            fwrite(STDERR, $e->getTraceAsString()."\n");
-            throw $e;
-        }
-    }
+            gc_enable();
+            error_reporting(-1);
+            ini_set("display_errors", 1);
+            ini_set("display_startup_errors", 1);
+            set_error_handler([$this, "errorHandler"], E_ALL);
+            register_shutdown_function([$this, "shutdownHandler"]);
 
-    /** PHP 8.5 port: one non-blocking network step, pumped by main loop. */
-    public function onTick(){
-        if(isset($this->sessionManager)){
-            $this->sessionManager->tickOnce();
+            $socket = new UDPServerSocket($this->getLogger(), $this->port, $this->interface);
+            $sessionManager = new SessionManager($this, $socket);
+
+            while(!$this->isShutdown()){
+                if($sessionManager !== null){
+                    $sessionManager->tickOnce();
+                }
+                usleep(1000); // ~1ms yield to avoid busy-spinning the core
+            }
+        }catch(\Throwable $e){
+            // NB: STDERR constant is not inherited into the child thread under
+            // pmmpthread, so use error_log() (writes to stderr via SAPI) instead.
+            error_log("\n=== RAKLIB run() THROW ===");
+            error_log(get_class($e).": ".$e->getMessage());
+            error_log("File: ".$e->getFile().":".$e->getLine());
+            error_log($e->getTraceAsString());
+            throw $e;
         }
     }
 
@@ -253,26 +267,5 @@ class RakLibServer extends \Thread{
 		return rtrim(str_replace(["\\", ".php", "phar://", rtrim(str_replace(["\\", "phar://"], ["/", ""], $this->mainPath), "/")], ["/", "", "", ""], $path), "/");
 	}
 
-    public function run(){
-        //Load removed dependencies, can't use require_once()
-        foreach($this->loadPaths as $name => $path){
-            if(!class_exists($name, false) and !interface_exists($name, false)){
-                require($path);
-            }
-        }
-        $this->loader->register(true);
-
-	    gc_enable();
-	    error_reporting(-1);
-	    ini_set("display_errors", 1);
-	    ini_set("display_startup_errors", 1);
-
-	    set_error_handler([$this, "errorHandler"], E_ALL);
-	    register_shutdown_function([$this, "shutdownHandler"]);
-
-
-        $socket = new UDPServerSocket($this->getLogger(), $this->port, $this->interface);
-        $this->sessionManager = new SessionManager($this, $socket);
-    }
-
 }
+

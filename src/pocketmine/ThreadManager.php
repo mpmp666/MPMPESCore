@@ -1,8 +1,9 @@
 <?php
 
 /*
- * Genisys PHP 8.5 port: ThreadManager shim. No pthreads \Volatile.
- * Holds registered pseudo-threads and pumps them each server tick.
+ * Genisys real-multithread: ThreadManager now only tracks live threads
+ * for monitoring / shutdown. Real threads run on their own (pmmp\thread),
+ * so the old per-tick pump (tickAll) is gone.
  */
 
 namespace pocketmine;
@@ -30,10 +31,6 @@ class ThreadManager{
 	 * @param Worker|Thread $thread
 	 */
 	public function add($thread){
-		// PHP 8.5 shim: check against the GLOBAL \Thread/\Worker base classes.
-		// RakLibServer/MainLogger extend \Thread/\Worker directly (not the
-		// pocketmine\Thread subclass), so checking pocketmine\Thread here would
-		// wrongly reject them and they'd never be pumped by tickAll().
 		if($thread instanceof \Thread or $thread instanceof \Worker){
 			$this->threads[spl_object_hash($thread)] = $thread;
 		}
@@ -53,12 +50,13 @@ class ThreadManager{
 		return array_values($this->threads);
 	}
 
-	/** Pump every registered pseudo-thread once (called each server tick). */
+	/**
+	 * No-op kept for backward compatibility. Real threads self-drive via
+	 * pmmp\thread; the main loop no longer pumps them.
+	 *
+	 * @deprecated
+	 */
 	public function tickAll(){
-		foreach($this->threads as $thread){
-			if($thread->isRunning() and !$thread->isKilled()){
-				$thread->onTick();
-			}
-		}
+		// intentionally empty
 	}
 }

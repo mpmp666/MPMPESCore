@@ -23,7 +23,14 @@ abstract class Thread extends \Thread{
 
 	public function setClassLoader(?\ClassLoader $loader = null){
 		if($loader === null){
-			$loader = Server::getInstance()->getLoader();
+			// Server may not exist yet when this thread is started from inside
+			// the Server constructor (RakLibServer/CommandReader). Defer: leave
+			// classLoader null and let the subclass use its own injected loader.
+			$server = Server::getInstance();
+			if($server === null){
+				return;
+			}
+			$loader = $server->getLoader();
 		}
 		$this->classLoader = $loader;
 	}
@@ -40,7 +47,9 @@ abstract class Thread extends \Thread{
 	}
 
 	public function onStart(){
-		if($this->getClassLoader() === null){
+		// Only auto-resolve a class loader if the server is up; otherwise the
+		// subclass already holds the loader it needs (or doesn't need one).
+		if($this->getClassLoader() === null and Server::getInstance() !== null){
 			$this->setClassLoader();
 		}
 	}

@@ -33,10 +33,14 @@ class ServerKiller extends Thread{
 		$this->deadline = time() + $time;
 	}
 
-	public function onTick(){
-		if(time() >= $this->deadline){
-			echo "\nTook too long to stop, server was killed forcefully!\n";
-			@\pocketmine\kill(getmypid());
+	/** Real thread body: force-kills the server if shutdown takes too long. */
+	public function onRun(){
+		while(!$this->isTerminated()){
+			if(time() >= $this->deadline){
+				echo "\nTook too long to stop, server was killed forcefully!\n";
+				@\pocketmine\kill(getmypid());
+			}
+			sleep(1);
 		}
 	}
 

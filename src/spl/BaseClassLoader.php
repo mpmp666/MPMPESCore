@@ -13,15 +13,21 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-*/
+ *
+ * Genisys real-multithread port: pmmp\thread\ThreadSafeArray is final, so we
+ * no longer extend the array container. Instead BaseClassLoader extends
+ * \Threaded (ThreadSafe, a sync object) and holds two ThreadSafeArray members
+ * for the lookup/class lists. All array ops and synchronized() calls target
+ * the members.
+ */
 
 class BaseClassLoader extends \Threaded implements ClassLoader{
 
     /** @var \ClassLoader */
     private $parent;
-    /** @var string[] */
+    /** @var \Volatile */
     private $lookup;
-    /** @var string[] */
+    /** @var \Volatile */
     private $classes;
 
 
@@ -30,8 +36,8 @@ class BaseClassLoader extends \Threaded implements ClassLoader{
      */
     public function __construct(?ClassLoader $parent = null){
         $this->parent = $parent;
-        $this->lookup = new \Threaded;
-        $this->classes = new \Threaded;
+        $this->lookup = new \Volatile;
+        $this->classes = new \Volatile;
     }
 
     /**
@@ -49,25 +55,25 @@ class BaseClassLoader extends \Threaded implements ClassLoader{
         }
 
         if($prepend){
-			$this->synchronized(function($path){
-				$entries = $this->getAndRemoveLookupEntries();
-				$this->lookup[] = $path;
-				foreach($entries as $entry){
-					$this->lookup[] = $entry;
-				}
-			}, $path);
+            $this->lookup->synchronized(function($path){
+                $entries = $this->getAndRemoveLookupEntries();
+                $this->lookup[] = $path;
+                foreach($entries as $entry){
+                    $this->lookup[] = $entry;
+                }
+            }, $path);
         }else{
             $this->lookup[] = $path;
         }
     }
-    
+
     protected function getAndRemoveLookupEntries(){
-		$entries = [];
-		while($this->count() > 0){
-			$entries[] = $this->shift();
-		}
-		return $entries;
-	}
+        $entries = [];
+        while($this->lookup->count() > 0){
+            $entries[] = $this->lookup->shift();
+        }
+        return $entries;
+    }
 
     /**
      * Removes a path from the lookup list
@@ -88,10 +94,10 @@ class BaseClassLoader extends \Threaded implements ClassLoader{
      * @return string[]
      */
     public function getClasses(){
-		$classes = [];
-		foreach($this->classes as $class){
-			$classes[] = $class;
-		}
+        $classes = [];
+        foreach($this->classes as $class){
+            $classes[] = $class;
+        }
         return $classes;
     }
 
@@ -127,21 +133,21 @@ class BaseClassLoader extends \Threaded implements ClassLoader{
         if($path !== null){
             include($path);
             if(!class_exists($name, false) and !interface_exists($name, false) and !trait_exists($name, false)){
-	            if($this->getParent() === null){
-		            throw new ClassNotFoundException("Class $name not found");
-	            }
+                if($this->getParent() === null){
+                    throw new ClassNotFoundException("Class $name not found");
+                }
                 return false;
             }
 
-	        if(method_exists($name, "onClassLoaded") and (new ReflectionClass($name))->getMethod("onClassLoaded")->isStatic()){
-		        $name::onClassLoaded();
-	        }
-	        
-	        $this->classes[] = $name;
+            if(method_exists($name, "onClassLoaded") and (new ReflectionClass($name))->getMethod("onClassLoaded")->isStatic()){
+                $name::onClassLoaded();
+            }
+
+            $this->classes[] = $name;
 
             return true;
         }elseif($this->getParent() === null){
-	        throw new ClassNotFoundException("Class $name not found");
+            throw new ClassNotFoundException("Class $name not found");
         }
 
         return false;

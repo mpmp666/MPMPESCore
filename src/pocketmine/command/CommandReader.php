@@ -30,21 +30,20 @@ class CommandReader extends Thread{
 	/** @var \Volatile */
 	protected $buffer;
 	private $shutdown = false;
-	private $stdin;
 	/** @var MainLogger */
 	private $logger;
 
 	public function __construct($logger){
-		$this->stdin = fopen("php://stdin", "r");
-		$opts = getopt("", ["disable-readline"]);
-		if(extension_loaded("readline") && !isset($opts["disable-readline"]) && (!function_exists("posix_isatty") || posix_isatty($this->stdin))){
-			$this->readline = true;
-		}else{
-			$this->readline = false;
-		}
 		$this->logger = $logger;
 		$this->buffer = new \Volatile();
 		$this->start();
+	}
+
+	private function initStdin(){
+		$stdin = fopen("php://stdin", "r");
+		$opts = getopt("", ["disable-readline"]);
+		$readline = (extension_loaded("readline") && !isset($opts["disable-readline"]) && (!function_exists("posix_isatty") || posix_isatty($stdin)));
+		return [$stdin, $readline];
 	}
 
 	public function shutdown(){
@@ -58,9 +57,9 @@ class CommandReader extends Thread{
 		}
 	}
 
-	private function readLine(){
-		if(!$this->readline){
-			$line = trim(fgets($this->stdin));
+	private function readLine($stdin, $readline){
+		if(!$readline){
+			$line = trim(fgets($stdin));
 			if($line !== ""){
 				$this->buffer[] = $line;
 			}
@@ -86,29 +85,29 @@ class CommandReader extends Thread{
 		$this->shutdown();
 	}
 
-	/**
-	 * Per-tick non-blocking console poll (PHP 8.5 pthreads shim).
-	 * Replaces the original blocking run() loop.
-	 */
-	public function onTick(){
-		if($this->shutdown){
+	/** Real thread body: blocks on stdin and pushes lines into the buffer. */
+	public function onRun(){
+		list($stdin, $readline) = $this->initStdin();
+		if(!is_resource($stdin)){
 			return;
 		}
-		$r = [$this->stdin];
-		$w = null;
-		$e = null;
-		if(stream_select($r, $w, $e, 0, 200000) > 0){
-			if(feof($this->stdin)){
-				if(Utils::getOS() == "win"){
-					$this->stdin = fopen("php://stdin", "r");
-					if(!is_resource($this->stdin)){
+		while(!$this->shutdown){
+			$r = [$stdin];
+			$w = null;
+			$e = null;
+			if(stream_select($r, $w, $e, 1) > 0){
+				if(feof($stdin)){
+					if(Utils::getOS() == "win"){
+						$stdin = fopen("php://stdin", "r");
+						if(!is_resource($stdin)){
+							return;
+						}
+					}else{
 						return;
 					}
-				}else{
-					return;
 				}
+				$this->readLine($stdin, $readline);
 			}
-			$this->readLine();
 		}
 	}
 
