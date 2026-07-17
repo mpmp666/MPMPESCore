@@ -1,0 +1,20 @@
+# 预编译 PHP 二进制（大文件，不入库；从 pocketmine 预编译包获取）
+bin/
+# 运行时产物
+crashdumps/
+server.log
+*.log
+# 运行时空文件
+banned-cids.txt
+banned-ips.txt
+banned-players.txt
+ops.txt
+white-list.txt
+# 玩家/世界/插件运行时数据（按需可取消忽略）
+players/
+plugins/
+worlds/
+# 参考用的最新 pocketmine（仅参考，不入库避免污染）
+PocketMine-MP-5.44.3/
+# 备份压缩包
+*.zip
