@@ -79,7 +79,7 @@ class AIHolder{
 			$this->tasks['ZombieGenerate'] = $this->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask([
 				$this,
 				"MobGenerate"
-			]), 20 * 45);
+			]), 20 * 30);
 		}
 
 
@@ -861,56 +861,76 @@ class AIHolder{
 	 */
 	public function MobGenerate(){
 		foreach($this->getServer()->getOnlinePlayers() as $p){
-			//$this->server->getLogger()->info("准备生成僵尸");
 			$level = $p->getLevel();
 			$max = 15;
-			//if ($level->getTime() >= 13500) {  //是夜晚
-			//$this->server->getLogger()->info("时间OK");
+			$isNight = $level->getTime() >= 13500;  // 夜晚才刷敌对生物(僵尸/骷髅/苦力怕)
 			$v3 = new Vector3($p->getX() + mt_rand(-$this->birth_r, $this->birth_r), $p->getY(), $p->getZ() + mt_rand(-$this->birth_r, $this->birth_r));
 			for($y0 = $p->getY() - 10; $y0 <= $p->getY() + 10; $y0++){
 				$v3->y = $y0;
 				if($this->whatBlock($level, $v3) == "block"){
-					//$this->server->getLogger()->info("方块OK");
 					$v3_1 = $v3;
 					$v3_1->y = $y0 + 1;
 					$v3_2 = $v3;
 					$v3_2->y = $y0 + 2;
-					$random = mt_rand(0, 1);
-
 
 					if($level->getBlock($v3_1)->getID() == 0 and $level->getBlock($v3_2)->getID() == 0){  //找到地面
-						/** @var Entity[] $zoC */
-						$zoC = [];
-						/** @var Entity[] $cowc */
-						$cowc = [];
+						// 统计当前世界各类生物数量(受 max 上限约束)
+						$zoC = $coC = $piC = $shC = $chC = $skC = $crC = [];
 						foreach($level->getEntities() as $zo){
 							if($zo instanceof Zombie) $zoC[] = $zo;
-							if($zo instanceof Cow) $cowc[] = $zo;
+							elseif($zo instanceof Cow) $coC[] = $zo;
+							elseif($zo instanceof Pig) $piC[] = $zo;
+							elseif($zo instanceof Sheep) $shC[] = $zo;
+							elseif($zo instanceof Chicken) $chC[] = $zo;
+							elseif($zo instanceof Skeleton) $skC[] = $zo;
+							elseif($zo instanceof Creeper) $crC[] = $zo;
 						}
 
-
-						if(count($zoC) > $max){
-							for($i = 0; $i < (count($zoC) - $max); $i++) $zoC[$i]->kill();
-						}elseif($random == 0 && $level->getTime() >= 13500){
+						// 60% 概率尝试生成一只生物
+						if(mt_rand(0, 100) <= 60){
 							$pos = new Position($v3->x, $v3->y, $v3->z, $level);
-
-							$this->server->getPluginManager()->callEvent($ev = new EntityGenerateEvent($pos, Zombie::NETWORK_ID, EntityGenerateEvent::CAUSE_AI_HOLDER));
-							if(!$ev->isCancelled()){
-								$this->spawnZombie($ev->getPosition());
+							if($isNight){
+								// 夜晚: 7 种都有可能(僵尸/骷髅/苦力怕/牛/猪/羊/鸡)
+								switch(mt_rand(0, 6)){
+									case 0:
+										if(count($zoC) <= $max) $this->spawnZombie($pos);
+										break;
+									case 1:
+										if(count($skC) <= $max) $this->spawnSkeleton($pos);
+										break;
+									case 2:
+										if(count($crC) <= $max) $this->spawnCreeper($pos);
+										break;
+									case 3:
+										if(count($coC) <= $max) $this->spawnCow($pos);
+										break;
+									case 4:
+										if(count($piC) <= $max) $this->spawnPig($pos);
+										break;
+									case 5:
+										if(count($shC) <= $max) $this->spawnSheep($pos);
+										break;
+									case 6:
+										if(count($chC) <= $max) $this->spawnChicken($pos);
+										break;
+								}
+							} else {
+								// 白天: 只刷被动生物(牛/猪/羊/鸡), 不刷敌对生物
+								switch(mt_rand(0, 3)){
+									case 0:
+										if(count($coC) <= $max) $this->spawnCow($pos);
+										break;
+									case 1:
+										if(count($piC) <= $max) $this->spawnPig($pos);
+										break;
+									case 2:
+										if(count($shC) <= $max) $this->spawnSheep($pos);
+										break;
+									case 3:
+										if(count($chC) <= $max) $this->spawnChicken($pos);
+										break;
+								}
 							}
-							//$this->server->getLogger()->info("生成1僵尸");
-						}
-
-						if(count($cowc) > $max){
-							for($i = 0; $i < (count($cowc) - $max); $i++) $cowc[$i]->kill();
-						}elseif($random == 1){
-							$pos = new Position($v3->x, $v3->y, $v3->z, $level);
-
-							$this->server->getPluginManager()->callEvent($ev = new EntityGenerateEvent($pos, Cow::NETWORK_ID, EntityGenerateEvent::CAUSE_AI_HOLDER));
-							if(!$ev->isCancelled()){
-								$this->spawnCow($ev->getPosition());
-							}
-							//$this->server->getLogger()->info("生成1牛");
 						}
 						break;
 					}
