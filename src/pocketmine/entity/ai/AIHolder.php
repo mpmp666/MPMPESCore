@@ -92,8 +92,8 @@ class AIHolder{
 
 		$this->ZombieAI = new ZombieAI($this);
 		$this->CowAI = new CowAI($this);
-		//$this->PigAI = new PigAI($this);
-		//$this->SheepAI = new SheepAI($this);
+		$this->PigAI = new PigAI($this);
+		$this->SheepAI = new SheepAI($this);
 		//TODO: improve AIs below
 		$this->ChickenAI = new ChickenAI($this);
 		$this->CreeperAI = new CreeperAI($this);

@@ -46,8 +46,7 @@ class CowAI{
 		//$this->getLogger()->info("牛数量：".count($this->plugin->Cow));
 		foreach($this->AIHolder->getServer()->getLevels() as $level){
 			foreach($level->getEntities() as $zo){
-				if(($zo::NETWORK_ID == Cow::NETWORK_ID) or ($zo::NETWORK_ID == Mooshroom::NETWORK_ID) or ($zo::NETWORK_ID == Pig::NETWORK_ID) or ($zo::NETWORK_ID == Sheep::NETWORK_ID) or
-					($zo::NETWORK_ID == Ocelot::NETWORK_ID) or ($zo::NETWORK_ID == Wolf::NETWORK_ID)){
+				if(($zo::NETWORK_ID == Cow::NETWORK_ID) or ($zo::NETWORK_ID == Mooshroom::NETWORK_ID)){
 					if($this->AIHolder->willMove($zo)){
 						if(!isset($this->AIHolder->Cow[$zo->getId()])){
 							$this->AIHolder->Cow[$zo->getId()] = array(
@@ -174,8 +173,7 @@ class CowAI{
 	public function CowRandomWalk(){
 		foreach($this->AIHolder->getServer()->getLevels() as $level){
 			foreach($level->getEntities() as $zo){
-				if(($zo::NETWORK_ID == Cow::NETWORK_ID) or ($zo::NETWORK_ID == Mooshroom::NETWORK_ID) or ($zo::NETWORK_ID == Pig::NETWORK_ID) or ($zo::NETWORK_ID == Sheep::NETWORK_ID) or
-					($zo::NETWORK_ID == Ocelot::NETWORK_ID) or ($zo::NETWORK_ID == Wolf::NETWORK_ID)){
+				if(($zo::NETWORK_ID == Cow::NETWORK_ID) or ($zo::NETWORK_ID == Mooshroom::NETWORK_ID)){
 					if(isset($this->AIHolder->Cow[$zo->getId()])){
 						$zom = &$this->AIHolder->Cow[$zo->getId()];
 						if($zom['canAttack'] != 0){

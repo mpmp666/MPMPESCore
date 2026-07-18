@@ -8,6 +8,10 @@ use pocketmine\entity\Pig;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
 
+/*
+ * PigAI - 复用 CowAI 已验证正常的随机行走逻辑, 仅限定 Pig 实体
+ * (原 PigAI 的 PigRandomWalk 发包存在运算符优先级 bug, 导致猪抽搐/瞬移, 这里直接用牛的逻辑)
+ */
 class PigAI{
 
 	private $AIHolder;
@@ -27,13 +31,12 @@ class PigAI{
 			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
 				$this,
 				"PigRandomWalk"
-			]), 1);
+			]), 10);
 		}
 	}
 
 	public function PigRandomWalkCalc(){
 		$this->dif = $this->AIHolder->getServer()->getDifficulty();
-		//$this->getLogger()->info("猪数量：".count($this->plugin->Pig));
 		foreach($this->AIHolder->getServer()->getLevels() as $level){
 			foreach($level->getEntities() as $zo){
 				if($zo::NETWORK_ID == Pig::NETWORK_ID){
@@ -73,8 +76,6 @@ class PigAI{
 						}
 						$zom = &$this->AIHolder->Pig[$zo->getId()];
 
-						//if ($zom['IsChasing'] === false) {  //自由行走模式
-
 						if($zom['gotimer'] == 0 or $zom['gotimer'] == 10){
 							//限制转动幅度
 							$newmx = mt_rand(-5, 5) / 10;
@@ -97,27 +98,20 @@ class PigAI{
 						$zom['gotimer'] += 0.5;
 						if($zom['gotimer'] >= 22) $zom['gotimer'] = 0;  //重置走路计时器
 
-						//$zom['motionx'] = mt_rand(-10,10)/10;
-						//$zom['motionz'] = mt_rand(-10,10)/10;
 						$zom['yup'] = 0;
 						$zom['up'] = 0;
 
 						//boybook的y轴判断法
-						//$width = $this->width;
 						$pos = new Vector3 ($zom['x'] + $zom['motionx'], floor($zo->getY()) + 1, $zom['z'] + $zom['motionz']);  //目标坐标
 						$zy = $this->AIHolder->ifjump($zo->getLevel(), $pos);
 
 						if($zy === false){  //前方不可前进
 							$pos2 = new Vector3 ($zom['x'], $zom['y'], $zom['z']);  //目标坐标
 							if($this->AIHolder->ifjump($zo->getLevel(), $pos2) === false){ //原坐标依然是悬空
-								//	$pos2 = new Vector3 ($zom['x'], $zom['y'],$zom['z']);  //下降
-								//	$zom['up'] = 1;
 								$zom['yup'] = 0;
 							}else{
-								//	print($zy-$pos->y);
 								$zom['motionx'] = -$zom['motionx'];
 								$zom['motionz'] = -$zom['motionz'];
-								//$zom['motiony'] = 0.01;
 								//转向180度，向身后走
 								$zom['up'] = 0;
 							}
@@ -130,11 +124,11 @@ class PigAI{
 							}
 						}
 
-						if($zom['motionx'] == 0 and $zom['motionz'] == 0){  //牛停止
+						if($zom['motionx'] == 0 and $zom['motionz'] == 0){  //猪停止
+										$yaw = $zo->yaw;  //默认保留当前朝向, 避免停步时 Undefined variable
 						}else{
 							//转向计算
 							$yaw = $this->AIHolder->getyaw($zom['motionx'], $zom['motionz']);
-							//$zo->setRotation($yaw,0);
 							$zom['yaw'] = $yaw;
 							$zom['pitch'] = 0;
 						}
@@ -147,14 +141,9 @@ class PigAI{
 						}
 
 						$zom['motiony'] = $pos2->getY() - $zo->getY();
-						//echo($zo->getY()."\n");
-						//var_dump($pos2);
-						//var_dump($zom['motiony']);
+							$zo->setRotation($yaw, 0);
 						$zo->setPosition($pos2);
-						//echo "SetPosition \n";
 					}
-					//}
-
 				}
 			}
 		}
@@ -169,23 +158,11 @@ class PigAI{
 						if($zom['canAttack'] != 0){
 							$zom['canAttack'] -= 1;
 						}
-						$pos = $zo->getLocation();
-						//echo ($zom['IsChasing']."\n");
 
 						//真正的自由落体 by boybook
 						$downly = $zo->onGround;
 
-						/*	if ($zo->onGround != false) {
-								$downly=true;
-
-								//$zom['motionY']=-0.04;
-								//zom['drop'] += 0.01;
-							} else {
-								$drop = 0;
-
-							}*/
 						if(abs($zo->getY() - $zom['oldv3']->y) == 1 and $zom['canjump'] === true){
-							//var_dump("跳");
 							$zom['canjump'] = false;
 							$zom['jump'] = 0.3;
 						}else{
@@ -196,15 +173,13 @@ class PigAI{
 							}
 						}
 
-						//echo ".";
 						$pk3 = new SetEntityMotionPacket;
 						$pk3->entities = [
-							[$zo->getID(), $zom['xxx'], $zom['jump'] - $downly ? 0.04 : 0, $zom['zzz']]
+							[$zo->getID(), $zom['xxx'], $zom['jump'] - ($downly ? 0.04 : 0), $zom['zzz']]
 						];
 						foreach($zo->getViewers() as $pl){
 							$pl->dataPacket($pk3);
 						}
-
 					}
 				}
 			}
@@ -217,7 +192,6 @@ class PigAI{
 				foreach($this->AIHolder->getServer()->getLevels() as $level){
 					if(!($level->getEntity($eid) instanceof Entity)){
 						unset($this->AIHolder->Pig[$eid]);
-						//echo "清除 $eid \n";
 					}
 				}
 			}
