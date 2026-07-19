@@ -63,3 +63,14 @@ MPMPESCore is derived from Genisys, which is licensed under the **LGPL**. MPMPES
 - mpmpes (MPMPESCore modifications)
 
 Thanks to everyone who contributed to the projects MPMPESCore is built upon.
+
+## 测试服 (Test Server)
+
+当前在线测试服地址：
+
+- **IP:** `148.100.112.191`
+- **端口 (Port):** `19132`
+- **版本:** Minecraft: Bedrock Edition (MCPE) 0.14.x
+- **连接方式:** 在 Minecraft 基岩版客户端「添加服务器」中填写上述 IP 与端口即可
+
+> 测试服由 mpmpes 维护，服务器名「金安卓」。
