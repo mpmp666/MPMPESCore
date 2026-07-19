@@ -1,76 +1,76 @@
 # MPMPESCore
 
-**MPMPESCore** is a modified Minecraft: Bedrock Edition (MCPE) server core, built on top of **Genisys** by mpmpes.
+**MPMPESCore** 是一个修改版的 Minecraft: 基岩版（MCPE）服务端核心，由 mpmpes 基于 **Genisys** 构建。
 
-- Core name: `MPMPESCore`
-- Version: `1.0`
-- Based on: [Genisys](https://github.com/iTXTech/Genisys) (a fork of PocketMine-MP by iTX Technologies)
-- Source: https://github.com/mpmp666/MPMPESCore
+- 核心名称：`MPMPESCore`
+- 版本：`1.0`
+- 基于：[Genisys](https://github.com/iTXTech/Genisys)（iTX Technologies 出品的 PocketMine-MP 分支）
+- 源码：https://github.com/mpmp666/MPMPESCore
 
-> This core is a modified build based on Genisys. The original Genisys is a fork of PocketMine-MP made by iTX Technologies LLC.
+> 本核心是基于 Genisys 的修改构建。原版 Genisys 是 iTX Technologies LLC 制作的 PocketMine-MP 分支。
 
-## Requirements
+## 运行环境要求
 
-- PHP **8.4** built with **ZTS** (Zend Thread Safety) enabled and the `pmmpthread` extension
-- Extensions: `sockets`, `curl`, `yaml`, `sqlite3`, `zlib`
-- A Minecraft: Bedrock Edition client matching the target protocol
+- 需要开启了 **ZTS**（Zend 线程安全）的 **PHP 8.4**，并装有 `pmmpthread` 扩展
+- 所需扩展：`sockets`、`curl`、`yaml`、`sqlite3`、`zlib`
+- 需要与目标协议匹配的 Minecraft: 基岩版客户端
 
-### PHP binary
+### PHP 二进制文件
 
-Download a prebuilt PHP from the official pmmp binaries repository:
+可从官方 pmmp 二进制仓库下载预编译的 PHP：
 
 **https://github.com/pmmp/PHP-Binaries**
 
-> Use **PHP 8.4** — this is the only version that has been verified to run MPMPESCore (ZTS + pmmpthread 6.x required).
+> 请使用 **PHP 8.4** —— 这是目前唯一验证过可运行 MPMPESCore 的版本（需 ZTS + pmmpthread 6.x）。
 
-The bundled `bin/php7/bin/php` is a PHP 8.4.16 ZTS build with `pmmpthread` 6.3.0 included, so you can run it directly without compiling PHP yourself.
+自带的 `bin/php7/bin/php` 是一个 PHP 8.4.16 ZTS 构建，已包含 `pmmpthread` 6.3.0，因此你可以直接运行，无需自己编译 PHP。
 
-## How to run
+## 如何运行
 
 ```bash
 ./start.sh
 ```
 
-Or directly:
+或者直接用命令运行：
 
 ```bash
 ./bin/php7/bin/php ./src/pocketmine/PocketMine.php
 ```
 
-On first run it will generate `server.properties`, `pocketmine.yml`, and `genisys.yml`. Edit them as needed, then restart.
+首次运行会生成 `server.properties`、`pocketmine.yml` 和 `genisys.yml`。按需修改后重启即可。
 
-## Commands
+## 指令
 
-- `ver` / `version` / `about` — show core name, version, API version, and PHP version.
-- `status` — show TPS / player count.
-- Standard PocketMine/Genisys commands are supported.
+- `ver` / `version` / `about` —— 显示核心名称、版本、API 版本和 PHP 版本。
+- `status` —— 显示 TPS / 在线玩家数。
+- 支持标准的 PocketMine / Genisys 指令。
 
-## Configuration highlights (`genisys.yml`)
+## 配置要点（`genisys.yml`）
 
-- `redstone.enable: true` — redstone mechanics
-- `ai.enable: true` — entity AI
-- `level.mobgenerate: true` — mob spawning
+- `redstone.enable: true` —— 红石机关
+- `ai.enable: true` —— 实体 AI
+- `level.mobgenerate: true` —— 怪物生成
 
-## License
+## 许可证
 
-MPMPESCore is derived from Genisys, which is licensed under the **LGPL**. MPMPESCore is distributed under the same LGPL license.
+MPMPESCore 衍生自 Genisys，Genisys 采用 **LGPL** 许可。MPMPESCore 以相同的 LGPL 许可分发。
 
-## Credits
+## 致谢
 
-- PocketMine-MP Team
-- iTX Technologies LLC (Genisys)
-- pmmp / pmmpthread team
-- mpmpes (MPMPESCore modifications)
+- PocketMine-MP 团队
+- iTX Technologies LLC（Genisys）
+- pmmp / pmmpthread 团队
+- mpmpes（MPMPESCore 的修改）
 
-Thanks to everyone who contributed to the projects MPMPESCore is built upon.
+感谢所有为 MPMPESCore 所基于项目做出贡献的人。
 
-## 测试服 (Test Server)
+## 测试服
 
 当前在线测试服地址：
 
-- **IP:** `148.100.112.191`
-- **端口 (Port):** `19132`
-- **版本:** Minecraft: Bedrock Edition (MCPE) 0.14.x
-- **连接方式:** 在 Minecraft 基岩版客户端「添加服务器」中填写上述 IP 与端口即可
+- **IP：** `148.100.112.191`
+- **端口（Port）：** `19132`
+- **版本：** Minecraft: 基岩版（MCPE）0.14.x
+- **连接方式：** 在 Minecraft 基岩版客户端的「添加服务器」中填写上述 IP 与端口即可
 
-> 测试服由 mpmpes 维护，服务器名「金安卓」。
+> 测试服由 mpmpes 维护，服务器名为「金安卓」。
