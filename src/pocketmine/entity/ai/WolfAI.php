@@ -26,6 +26,14 @@ class WolfAI{
 		if($this->AIHolder->getServer()->aiConfig["wolf"] ?? true){
 			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
 				$this,
+				"WolfRandomWalkCalc"
+			]), 10);
+			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+				$this,
+				"WolfRandomWalk"
+			]), 1);
+			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+				$this,
 				"WolfSit"
 			]), 10);
 			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
@@ -36,6 +44,82 @@ class WolfAI{
 				$this,
 				"WolfPlay"
 			]), 10);
+		}
+	}
+
+	public function WolfRandomWalkCalc(){
+		$this->dif = $this->AIHolder->getServer()->getDifficulty();
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Wolf)) continue;
+				if($zo->isSitting()) continue; // 坐下不随机走
+				if($this->AIHolder->willMove($zo)){
+					if(!isset($this->AIHolder->Wolf[$zo->getId()])){
+						$this->AIHolder->Wolf[$zo->getId()] = array(
+							'ID' => $zo->getId(),
+							'IsChasing' => false,
+							'motionx' => 0,
+							'motiony' => 0,
+							'motionz' => 0,
+							'hurt' => 10,
+							'time' => 10,
+							'x' => 0,
+							'y' => 0,
+							'z' => 0,
+							'oldv3' => $zo->getLocation(),
+							'yup' => 20,
+							'up' => 0,
+							'yaw' => $zo->yaw,
+							'pitch' => 0,
+							'level' => $zo->getLevel()->getName(),
+							'xxx' => 0,
+							'zzz' => 0,
+							'gotimer' => 10,
+							'swim' => 0,
+							'jump' => 0.01,
+							'canjump' => true,
+							'drop' => false,
+							'canAttack' => 0,
+							'knockBack' => false,
+						);
+						$zom = &$this->AIHolder->Wolf[$zo->getId()];
+						$zom['x'] = $zo->getX();
+						$zom['y'] = $zo->getY();
+						$zom['z'] = $zo->getZ();
+					}
+					$zom = &$this->AIHolder->Wolf[$zo->getId()];
+					if($zom['gotimer'] == 0 or $zom['gotimer'] == 10){
+						$newmx = mt_rand(-5, 5) / 10;
+						while(abs($newmx - $zom['motionx']) >= 0.7){
+							$newmx = mt_rand(-5, 5) / 10;
+						}
+						$newmz = mt_rand(-5, 5) / 10;
+						while(abs($newmz - $zom['motionz']) >= 0.7){
+							$newmz = mt_rand(-5, 5) / 10;
+						}
+						$zom['motionx'] = $newmx;
+						$zom['motionz'] = $newmz;
+						$zom['gotimer'] = 0;
+					}
+					$zom['gotimer'] += 0.5;
+				}
+			}
+		}
+	}
+
+	public function WolfRandomWalk(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Wolf)) continue;
+				if($zo->isSitting()) continue;
+				if(!isset($this->AIHolder->Wolf[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Wolf[$zo->getId()];
+				$pos = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
+				$pos->x += $zom['motionx'];
+				$pos->z += $zom['motionz'];
+				if(!$this->AIHolder->willMove($zo)) continue;
+				$zo->setMotion(new Vector3($zom['motionx'] / 10, 0, $zom['motionz'] / 10));
+			}
 		}
 	}
 
