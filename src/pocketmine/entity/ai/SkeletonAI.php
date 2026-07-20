@@ -95,7 +95,8 @@ class SkeletonAI{
 	 */
 	public function SkeletonFleeSun(){
 		foreach($this->AIHolder->getServer()->getLevels() as $level){
-			if($level->isDayTime() === false) continue;
+			$t = $level->getTime();
+			if(!($t >= 0 && $t < 12000)) continue; // 白天(0~12000)才躲太阳, 用 Level::getTime() 替代不存在的 isDayTime()
 			foreach($level->getEntities() as $zo){
 				if(!($zo instanceof Skeleton)) continue;
 				$head = new \pocketmine\math\Vector3(floor($zo->x), floor($zo->y) + 1, floor($zo->z));
