@@ -83,7 +83,7 @@ class SkeletonAI{
 				if(!($zo instanceof Skeleton)) continue;
 				$pos = new \pocketmine\math\Vector3(floor($zo->x), floor($zo->y), floor($zo->z));
 				$block = $level->getBlock($pos);
-				if($block->getId() === Block::WOODEN_DOOR){
+				if($block->getId() === Block::WOODEN_DOOR_BLOCK){
 					$level->setBlock($pos, Block::get(Block::WOODEN_DOOR, 4 | ($block->getDamage() & 3)), true, true);
 				}
 			}

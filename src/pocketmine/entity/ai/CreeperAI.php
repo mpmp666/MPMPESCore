@@ -81,10 +81,8 @@ class CreeperAI{
 				}
 				if($target !== null){
 					$zom['swell'] = min(1.0, $zom['swell'] + 0.1);
-					$zo->setDataProperty(\pocketmine\entity\Entity::DATA_POWERED, \pocketmine\entity\Entity::DATA_TYPE_BYTE, 1);
 				} else {
 					$zom['swell'] = max(0.0, $zom['swell'] - 0.1);
-					$zo->setDataProperty(\pocketmine\entity\Entity::DATA_POWERED, \pocketmine\entity\Entity::DATA_TYPE_BYTE, 0);
 				}
 			}
 		}
