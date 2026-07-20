@@ -35,6 +35,11 @@ class Sheep extends Animal implements Colorable{
 		}
 		parent::__construct($chunk, $nbt);
 
+		if(!isset($nbt->Sheared)){
+			$nbt->Sheared = new ByteTag("Sheared", 0);
+		}
+		$this->sheared = (bool) $nbt["Sheared"];
+
 		$this->setDataProperty(self::DATA_COLOR_INFO, self::DATA_TYPE_BYTE, $this->getColor());
 	}
 
@@ -84,10 +89,39 @@ class Sheep extends Animal implements Colorable{
 		parent::spawnTo($player);
 	}
 	
+	/** @var bool 是否已被剪毛 (剪毛后不掉毛, 重生羊毛需吃草恢复) */
+	public $sheared = false;
+
+	/**
+	 * 剪毛: 玩家手持剪刀右键调用
+	 * 原版: 掉落 1-3 有色羊毛, 剪刀耐久-1, 羊进入已剪状态
+	 * (对应 MCPE 0.14.3 剪刀交互; 核心原无此功能, 此处补全)
+	 */
+	public function shear(Player $player) : bool{
+		if($this->sheared) return false; // 已剪过
+		$item = $player->getInventory()->getItemInHand();
+		if($item->getId() !== ItemItem::SHEARS) return false;
+		$this->sheared = true;
+		$this->namedtag->Sheared = new ByteTag("Sheared", 1);
+		// 掉落 1-3 有色羊毛
+		$count = mt_rand(1, 3);
+		$wool = ItemItem::get(ItemItem::WOOL, $this->getColor(), $count);
+		$this->getLevel()->dropItem($this->add(0, $this->getEyeHeight(), 0), $wool);
+		// 剪刀耐久 -1
+		$item->setDamage($item->getDamage() + 1);
+		if($item->getDamage() >= $item->getMaxDurability()){
+			$player->getInventory()->setItemInHand(ItemItem::get(ItemItem::AIR));
+		}else{
+			$player->getInventory()->setItemInHand($item);
+		}
+		return true;
+	}
+
 	public function getDrops(){
-		$drops = [
-			ItemItem::get(ItemItem::WOOL, $this->getColor(), 1)
-		];
+		$drops = [];
+		if(!$this->sheared){ // 已剪毛的羊死亡不掉羊毛
+			$drops[] = ItemItem::get(ItemItem::WOOL, $this->getColor(), 1);
+		}
 		return $drops;
 	}
 }

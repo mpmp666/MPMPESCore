@@ -91,6 +91,11 @@ class ZombieAI{
 			if(!($t >= 0 && $t < 12000)) continue; // 白天(0~12000)才躲太阳, 用 Level::getTime() 替代不存在的 isDayTime()
 			foreach($level->getEntities() as $zo){
 				if(!($zo instanceof Zombie)) continue;
+					// 打人优先: 正在追玩家(IsChasing)时不躲阳光, 只有闲逛才躲
+					if(!empty($this->AIHolder->Zombie[$zo->getId()]['IsChasing'])){
+						$this->AIHolder->Zombie[$zo->getId()]['fleeSun'] = false;
+						continue;
+					}
 				$head = new \pocketmine\math\Vector3(floor($zo->x), floor($zo->y) + 1, floor($zo->z));
 				if($level->getBlock($head)->getId() === Block::AIR){
 					if(isset($this->AIHolder->Zombie[$zo->getId()])){
@@ -162,6 +167,16 @@ class ZombieAI{
 						if ($zom['IsChasing'] === false) {  //自由行走模式
 							if ($zom['gotimer'] == 0 or $zom['gotimer'] == 10) {
 								//限制转动幅度
+					// 躲阳光: 暴晒时大幅减速 (FleeSunGoal 设的 fleeSun 标志在此消费)
+					if(!empty($zom["fleeSun"])){
+						if(mt_rand(0,100) < 70){ // 70% 概率原地不动, 模拟找阴凉
+							$zom["motionx"] = 0;
+							$zom["motionz"] = 0;
+							$zom["up"] = 0;
+							$zom["yup"] = 0;
+							continue 2; // 跳过本轮 motion 计算
+						}
+					}
 								$newmx = mt_rand(-5,5)/10;
 								while (abs($newmx - $zom['motionx']) >= 0.7) {
 									$newmx = mt_rand(-5,5)/10;

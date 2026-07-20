@@ -8,6 +8,7 @@ use pocketmine\math\Vector2;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Sheep;
 use pocketmine\entity\Monster;
+use pocketmine\item\Item;
 use pocketmine\block\Block;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
@@ -51,6 +52,11 @@ class SheepAI{
 				$this,
 				"SheepEatGrass"
 			]), 20);
+			// 原版 0.14.3 TemptGoal: 手持小麦时羊跟随玩家
+			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+				$this,
+				"SheepTempt"
+		]), 8);
 		// 原版 0.14.3 FloatGoal / AvoidMobGoal / BreedGoal
 		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
 			$this,
@@ -287,6 +293,38 @@ class SheepAI{
 								}
 								break;
 						}
+					}
+				}
+			}
+		}
+	}
+	/*
+	 * TemptGoal - 原版 0.14.3: 手持小麦时羊跟随玩家
+	 */
+	public function SheepTempt(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Sheep)) continue;
+				if(!isset($this->AIHolder->Sheep[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Sheep[$zo->getId()];
+				if(!empty($zom['panic'])) continue;
+				if($zom['eating']) continue;
+
+				$target = null;
+				foreach($level->getPlayers() as $p){
+					$item = $p->getInventory()->getItemInHand();
+					if($item->getId() === Item::WHEAT){
+						if($p->distance($zo) < 8) { $target = $p; break; }
+					}
+				}
+				if($target !== null){
+					$dx = $target->x - $zo->x;
+					$dz = $target->z - $zo->z;
+					$len = sqrt($dx*$dx + $dz*$dz) ?: 1;
+					if($len > 1.2){
+						$zom['motionx'] = $dx / $len * 0.4;
+						$zom['motionz'] = $dz / $len * 0.4;
+						$zom['IsChasing'] = true;
 					}
 				}
 			}
