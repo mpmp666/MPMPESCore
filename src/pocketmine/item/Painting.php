@@ -29,11 +29,15 @@ class Painting extends Item{
 
 	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
 		if($target->isTransparent() === false and $face > 1 and $block->isSolid() === false){
+			// 修复画朝向: 原表整体转了 180 度导致正反面颠倒("面不对")
+			// 对齐 MCPE 0.14.3 原版 SO: 客户端 AddPaintingPacket.direction*90=画朝向, 画背贴被点墙面
+			// 目标 face->direction: 北(2)->0,南(3)->2,西(4)->3,东(5)->1
+			// 经 Entity::getDirection() (dir=(yaw/90+1)%4) 反推 face->yaw/90: 北->3,南->1,西->2,东->0
 			$faces = [
-				2 => 1,
-				3 => 3,
-				4 => 0,
-				5 => 2,
+				2 => 3,
+				3 => 1,
+				4 => 2,
+				5 => 0,
 			];
 			$motives = [
 				// Motive Width Height
