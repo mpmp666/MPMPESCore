@@ -91,11 +91,6 @@ class ZombieAI{
 			if(!($t >= 0 && $t < 12000)) continue; // 白天(0~12000)才躲太阳, 用 Level::getTime() 替代不存在的 isDayTime()
 			foreach($level->getEntities() as $zo){
 				if(!($zo instanceof Zombie)) continue;
-					// 打人优先: 正在追玩家(IsChasing)时不躲阳光, 只有闲逛才躲
-					if(!empty($this->AIHolder->Zombie[$zo->getId()]['IsChasing'])){
-						$this->AIHolder->Zombie[$zo->getId()]['fleeSun'] = false;
-						continue;
-					}
 				$head = new \pocketmine\math\Vector3(floor($zo->x), floor($zo->y) + 1, floor($zo->z));
 				if($level->getBlock($head)->getId() === Block::AIR){
 					if(isset($this->AIHolder->Zombie[$zo->getId()])){
@@ -380,6 +375,27 @@ $xxx =0;$zzz=0;
 										$zzz = $zz;
 									}
  //严重加速bug	
+								// 躲阳光优先: 被晒到时移动偏向阴凉且减速 (即使追人)
+								if(!empty($zom['fleeSun'])){
+									$shade = null;
+									$dirs = [[1,0],[-1,0],[0,1],[0,-1],[0,0]];
+									foreach($dirs as $d){
+										$hx = floor($zo->x) + $d[0];
+										$hz = floor($zo->z) + $d[1];
+										$hy = floor($zo->y) + 1;
+										$hb = $level->getBlock(new \pocketmine\math\Vector3($hx, $hy, $hz));
+										$hb2 = $level->getBlock(new \pocketmine\math\Vector3($hx, $hy+1, $hz));
+										if($hb->getId() !== Block::AIR or $hb2->getId() !== Block::AIR){
+											$shade = $d; break;
+										}
+									}
+									if($shade !== null){
+										$xxx = $shade[0] * 0.3;
+										$zzz = $shade[1] * 0.3;
+									} else {
+										$xxx *= 0.3; $zzz *= 0.3; // 无阴影可躲则减速徘徊
+									}
+								}
 									$zom['xxx'] = $xxx;
 									$zom['zzz'] = $zzz;
 
