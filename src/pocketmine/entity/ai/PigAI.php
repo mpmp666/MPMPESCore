@@ -5,6 +5,8 @@ namespace pocketmine\entity\ai;
 use pocketmine\math\Vector3;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Pig;
+use pocketmine\entity\Monster;
+use pocketmine\block\Block;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
 use pocketmine\item\Item;
@@ -42,6 +44,19 @@ class PigAI{
 			$this,
 			"PigPanic"
 		]), 4);
+		// 原版 0.14.3 FloatGoal / AvoidMobGoal / BreedGoal
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"PigFloat"
+		]), 4);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"PigAvoid"
+		]), 6);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"PigBreed"
+		]), 20);
 		}
 	}
 
@@ -250,6 +265,73 @@ class PigAI{
 					$zom['IsChasing'] = true;
 				} else {
 					$zom['IsChasing'] = false;
+				}
+			}
+		}
+	}
+	/*
+	 * FloatGoal - 防沉底 (通用)
+	 */
+	public function PigFloat(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Pig)) continue;
+				if(!isset($this->AIHolder->Pig[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Pig[$zo->getId()];
+				$head = new \pocketmine\math\Vector3($zo->x, $zo->y + $zo->getEyeHeight(), $zo->z);
+				if($level->isFullBlock($head) and $level->getBlock($head)->getId() === Block::WATER){
+					$zom['yyy'] = 0.3;
+				} else {
+					$zom['yyy'] = 0;
+				}
+			}
+		}
+	}
+
+	/*
+	 * AvoidMobGoal - 避怪
+	 */
+	public function PigAvoid(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Pig)) continue;
+				if(!isset($this->AIHolder->Pig[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Pig[$zo->getId()];
+				if(!empty($zom['panic'])) continue;
+				foreach($level->getEntities() as $m){
+					if($m instanceof Monster and $m->distance($zo) < 6){
+						$dx = $zo->x - $m->x; $dz = $zo->z - $m->z;
+						$len = sqrt($dx*$dx + $dz*$dz) ?: 1;
+						$zom['motionx'] = $dx/$len*0.5; $zom['motionz'] = $dz/$len*0.5;
+						$zom['IsChasing'] = true; break;
+					}
+				}
+			}
+		}
+	}
+
+	/*
+	 * BreedGoal - 繁殖
+	 */
+	public function PigBreed(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Pig)) continue;
+				if(!isset($this->AIHolder->Pig[$zo->getId()])) continue;
+				if($zo->inLove > 0){
+					$zo->inLove -= 1;
+					foreach($level->getEntities() as $other){
+						if($other instanceof Pig and $other !== $zo and $other->inLove > 0 and $other->distance($zo) < 2){
+							if(mt_rand(0,100) < 15){
+								$nbt = new \pocketmine\nbt\tag\CompoundTag("", [new \pocketmine\nbt\tag\ByteTag("Age", -24000)]);
+								$baby = new Pig($zo->getLevel()->getChunk($zo->x>>4, $zo->z>>4), $nbt);
+									$baby->setPosition(new \pocketmine\math\Vector3($zo->x, $zo->y, $zo->z));
+									$baby->spawnToAll();
+									$zo->inLove = 0; $other->inLove = 0;
+								}
+								break;
+						}
+					}
 				}
 			}
 		}

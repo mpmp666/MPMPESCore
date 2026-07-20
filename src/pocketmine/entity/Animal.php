@@ -31,6 +31,22 @@ abstract class Animal extends Creature implements Ageable{
 		}
 	}
 
+
+	// 原版 0.14.3 AI 状态 (移植 EatBlockGoal/BreedGoal/SitGoal 等用, 普通属性避免引用未定义 DATA_FLAG)
+	/** @var bool 是否坐下 (Wolf SitGoal) */
+	public $sitting = false;
+	/** @var int 繁殖冷却/求爱计时 (BreedGoal/MakeLoveGoal), >0 表示处于 inLove */
+	public $inLove = 0;
+	/** @var int 吃草计时 (EatBlockGoal) */
+	public $eatTimer = 0;
+	/** @var bool 正在吃草 */
+	public $eating = false;
+
+	public function isSitting() : bool{ return $this->sitting; }
+	public function setSitting(bool $v = true){ $this->sitting = $v; }
+	public function isInLove() : bool{ return $this->inLove > 0; }
+	public function setInLove(int $ticks = 600){ $this->inLove = $ticks; }
+
 	public function isBaby(){
 		return $this->getDataFlag(self::DATA_AGEABLE_FLAGS, self::DATA_FLAG_BABY);
 	}

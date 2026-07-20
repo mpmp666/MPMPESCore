@@ -45,7 +45,7 @@ class AIHolder{
 	public $CowAI;
 	public $PigAI;
 	public $SheepAI;
-	public $ChickenAI;
+	public $WolfAI;	public $ChickenAI;
 	public $IronGolemAI;
 	public $SnowGolemAI;
 	public $PigZombieAI;
@@ -56,7 +56,7 @@ class AIHolder{
 	public $Cow = [];
 	public $Pig = [];
 	public $Sheep = [];
-	public $Chicken = [];
+	public $wolf = [];	public $Chicken = [];
 	public $irongolem = [];
 	public $snowgolem = [];
 	public $pigzombie = [];
@@ -94,6 +94,7 @@ class AIHolder{
 		$this->CowAI = new CowAI($this);
 		$this->PigAI = new PigAI($this);
 		$this->SheepAI = new SheepAI($this);
+		$this->WolfAI = new WolfAI($this);
 		//TODO: improve AIs below
 		$this->ChickenAI = new ChickenAI($this);
 		$this->CreeperAI = new CreeperAI($this);

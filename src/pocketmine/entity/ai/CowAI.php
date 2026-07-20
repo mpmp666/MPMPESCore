@@ -9,6 +9,7 @@ use pocketmine\entity\Wolf;
 use pocketmine\math\Vector3;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Cow;
+use pocketmine\entity\Monster;
 use pocketmine\entity\Mooshroom;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
@@ -47,6 +48,19 @@ class CowAI{
 			$this,
 			"CowPanic"
 		]), 4);
+		// 原版 0.14.3 FloatGoal (防沉底) / AvoidMobGoal (避怪) / BreedGoal (繁殖)
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"CowFloat"
+		]), 4);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"CowAvoid"
+		]), 6);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"CowBreed"
+		]), 20);
 			/*	$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 					$this,
 					"array_clear"
@@ -301,6 +315,82 @@ class CowAI{
 			}
 	}
 
+	/*
+	 * FloatGoal - 原版 0.14.3: 水中自动上浮防淹死 (所有 Mob 通用)
+	 */
+	public function CowFloat(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Cow)) continue;
+				if(!isset($this->AIHolder->Cow[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Cow[$zo->getId()];
+				// 若头在水里, 给向上 motion
+				$head = new \pocketmine\math\Vector3($zo->x, $zo->y + $zo->getEyeHeight(), $zo->z);
+				if($level->isFullBlock($head) and $level->getBlock($head)->getId() === Block::WATER){
+					$zom['yyy'] = 0.3; // 上浮
+				} else {
+					$zom['yyy'] = 0;
+				}
+			}
+		}
+	}
+
+	/*
+	 * AvoidMobGoal - 原版 0.14.3: 被动动物躲避附近怪物
+	 */
+	public function CowAvoid(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Cow)) continue;
+				if(!isset($this->AIHolder->Cow[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Cow[$zo->getId()];
+				if(!empty($zom['panic'])) continue;
+				foreach($level->getEntities() as $m){
+					if($m instanceof Monster and $m->distance($zo) < 6){
+						$dx = $zo->x - $m->x;
+						$dz = $zo->z - $m->z;
+						$len = sqrt($dx*$dx + $dz*$dz) ?: 1;
+						$zom['motionx'] = $dx/$len*0.5;
+						$zom['motionz'] = $dz/$len*0.5;
+						$zom['IsChasing'] = true;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	/*
+	 * BreedGoal / MakeLoveGoal - 原版 0.14.3: 两只 inLove 动物靠近 -> 生成幼崽
+	 * 简化: 双方 inLove 且邻近 -> 概率 spawn  baby + 清空 inLove
+	 */
+	public function CowBreed(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Cow)) continue;
+				if(!isset($this->AIHolder->Cow[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Cow[$zo->getId()];
+				if($zo->inLove > 0){
+					$zo->inLove -= 1;
+					foreach($level->getEntities() as $other){
+						if($other instanceof Cow and $other !== $zo and $other->inLove > 0 and $other->distance($zo) < 2){
+							if(mt_rand(0,100) < 15){
+								// 生成幼崽
+								$nbt = new \pocketmine\nbt\tag\CompoundTag("", [
+									new \pocketmine\nbt\tag\ByteTag("Age", -24000) // baby
+								]);
+								$baby = new Cow($zo->getLevel()->getChunk($zo->x>>4, $zo->z>>4), $nbt);
+									$baby->setPosition(new \pocketmine\math\Vector3($zo->x, $zo->y, $zo->z));
+									$baby->spawnToAll();
+									$zo->inLove = 0; $other->inLove = 0;
+								}
+								break;
+						}
+					}
+				}
+			}
+		}
+	}
 	public function array_clear(){
 		if(count($this->AIHolder->Cow) != 0){
 			foreach($this->AIHolder->Cow as $eid => $info){

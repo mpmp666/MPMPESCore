@@ -7,10 +7,11 @@ use pocketmine\math\Vector3;
 use pocketmine\math\Vector2;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Sheep;
+use pocketmine\entity\Monster;
+use pocketmine\block\Block;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
 use pocketmine\event\entity\EntityDamageEvent;
-use pocketmine\block\Block;
 
 /*
  * SheepAI - 复用 CowAI 已验证正常的随机行走逻辑, 仅限定 Sheep 实体
@@ -50,6 +51,19 @@ class SheepAI{
 				$this,
 				"SheepEatGrass"
 			]), 20);
+		// 原版 0.14.3 FloatGoal / AvoidMobGoal / BreedGoal
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"SheepFloat"
+		]), 4);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"SheepAvoid"
+		]), 6);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"SheepBreed"
+		]), 20);
 		}
 	}
 
@@ -210,6 +224,74 @@ class SheepAI{
 		}
 	}
 
+	/*
+	 * FloatGoal - 防沉底 (通用)
+	 */
+	public function SheepFloat(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Sheep)) continue;
+				if(!isset($this->AIHolder->Sheep[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Sheep[$zo->getId()];
+				$head = new \pocketmine\math\Vector3($zo->x, $zo->y + $zo->getEyeHeight(), $zo->z);
+				if($level->isFullBlock($head) and $level->getBlock($head)->getId() === Block::WATER){
+					$zom['yyy'] = 0.3;
+				} else {
+					$zom['yyy'] = 0;
+				}
+			}
+		}
+	}
+
+	/*
+	 * AvoidMobGoal - 避怪
+	 */
+	public function SheepAvoid(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Sheep)) continue;
+				if(!isset($this->AIHolder->Sheep[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Sheep[$zo->getId()];
+				if($zom['eating']) continue;
+				foreach($level->getEntities() as $m){
+					if($m instanceof Monster and $m->distance($zo) < 6){
+						$dx = $zo->x - $m->x; $dz = $zo->z - $m->z;
+						$len = sqrt($dx*$dx + $dz*$dz) ?: 1;
+						$zom['motionx'] = $dx/$len*0.5; $zom['motionz'] = $dz/$len*0.5;
+						$zom['IsChasing'] = true; break;
+					}
+				}
+			}
+		}
+	}
+
+	/*
+	 * BreedGoal - 繁殖
+	 */
+	public function SheepBreed(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Sheep)) continue;
+				if(!isset($this->AIHolder->Sheep[$zo->getId()])) continue;
+				if($zo->inLove > 0){
+					$zo->inLove -= 1;
+					foreach($level->getEntities() as $other){
+						if($other instanceof Sheep and $other !== $zo and $other->inLove > 0 and $other->distance($zo) < 2){
+							if(mt_rand(0,100) < 15){
+								$nbt = new \pocketmine\nbt\tag\CompoundTag("", [new \pocketmine\nbt\tag\ByteTag("Age", -24000)]);
+								$baby = new Sheep($zo->getLevel()->getChunk($zo->x>>4, $zo->z>>4), $nbt);
+									$baby->setPosition(new \pocketmine\math\Vector3($zo->x, $zo->y, $zo->z));
+									$baby->setColor($zo->getColor());
+									$baby->spawnToAll();
+									$zo->inLove = 0; $other->inLove = 0;
+								}
+								break;
+						}
+					}
+				}
+			}
+		}
+	}
 	public function array_clear(){
 		if(count($this->AIHolder->Sheep) != 0){
 			foreach($this->AIHolder->Sheep as $eid => $info){

@@ -9,6 +9,7 @@ use pocketmine\math\Vector2;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Skeleton;
 use pocketmine\scheduler\CallbackTask;
+use pocketmine\block\Block;
 use pocketmine\network\protocol\SetEntityMotionPacket;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\EntityShootBowEvent;
@@ -57,6 +58,15 @@ class SkeletonAI{
 				$this,
 				"SkeletonFire"
 			] ), 40);
+			// 原版 0.14.3 OpenDoorGoal / FleeSunGoal
+			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+				$this,
+				"SkeletonOpenDoor"
+			] ), 20);
+			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+				$this,
+				"SkeletonFleeSun"
+			] ), 20);
 			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 				$this,
 				"array_clear"
@@ -64,6 +74,39 @@ class SkeletonAI{
 		}
 	}
 
+	/*
+	 * OpenDoorGoal - 原版 0.14.3: 骷髅开门
+	 */
+	public function SkeletonOpenDoor(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Skeleton)) continue;
+				$pos = new \pocketmine\math\Vector3(floor($zo->x), floor($zo->y), floor($zo->z));
+				$block = $level->getBlock($pos);
+				if($block->getId() === Block::WOODEN_DOOR){
+					$level->setBlock($pos, Block::get(Block::WOODEN_DOOR, 4 | ($block->getDamage() & 3)), true, true);
+				}
+			}
+		}
+	}
+
+	/*
+	 * FleeSunGoal - 原版 0.14.3: 白天骷髅躲太阳
+	 */
+	public function SkeletonFleeSun(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			if($level->isDayTime() === false) continue;
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Skeleton)) continue;
+				$head = new \pocketmine\math\Vector3(floor($zo->x), floor($zo->y) + 1, floor($zo->z));
+				if($level->getBlock($head)->getId() === Block::AIR){
+					if(isset($this->AIHolder->Skeleton[$zo->getId()])){
+						$this->AIHolder->Skeleton[$zo->getId()]['fleeSun'] = true;
+					}
+				}
+			}
+		}
+	}
 	public function array_clear() {
 		if (count($this->AIHolder->Skeleton) != 0) {
 			foreach ($this->AIHolder->Skeleton as $eid=> $info) {

@@ -50,9 +50,45 @@ class CreeperAI{
 				$this,
 				"array_clear"
 			] ), 20 * 5);
+			// 原版 0.14.3 SwellGoal: 靠近目标膨胀, 满阈值引爆
+			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+				$this,
+				"CreeperSwell"
+			]), 4);
 		}
 	}
 
+	/*
+	 * SwellGoal - 原版 0.14.3: 苦力怕膨胀行为
+	 *  canUse: 有仇恨目标且在膨胀半径内
+	 *  tick  : swell 累加, 到 1.0 显示膨胀 (DATA_POWERED 近似)
+	 *  stop  : 目标消失/远离则 swell 衰减
+	 * 注: 实际引爆由 CreeperHateWalk 已有 Explosion 逻辑处理
+	 */
+	public function CreeperSwell(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof \pocketmine\entity\Creeper)) continue;
+				if(!isset($this->AIHolder->Creeper[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Creeper[$zo->getId()];
+				if(!isset($zom['swell'])) $zom['swell'] = 0;
+
+				$target = null;
+				if(isset($zom['target']) and $zom['target'] instanceof Player){
+					if($zom['target']->isOnline() and $zom['target']->distance($zo) < 3){
+						$target = $zom['target'];
+					}
+				}
+				if($target !== null){
+					$zom['swell'] = min(1.0, $zom['swell'] + 0.1);
+					$zo->setDataProperty(\pocketmine\entity\Entity::DATA_POWERED, \pocketmine\entity\Entity::DATA_TYPE_BYTE, 1);
+				} else {
+					$zom['swell'] = max(0.0, $zom['swell'] - 0.1);
+					$zo->setDataProperty(\pocketmine\entity\Entity::DATA_POWERED, \pocketmine\entity\Entity::DATA_TYPE_BYTE, 0);
+				}
+			}
+		}
+	}
 	public function array_clear() {
 		if (count($this->AIHolder->Creeper) != 0) {
 			foreach ($this->AIHolder->Creeper as $eid=> $info) {
