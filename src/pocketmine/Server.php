@@ -69,6 +69,8 @@ use pocketmine\level\format\LevelProviderManager;
 use pocketmine\level\format\mcregion\McRegion;
 use pocketmine\level\generator\biome\Biome;
 use pocketmine\level\generator\Flat;
+use pocketmine\level\generator\astral\Astral;
+use pocketmine\level\generator\ender\Ender;
 use pocketmine\level\generator\VoidGenerator;
 use pocketmine\level\generator\Generator;
 use pocketmine\level\generator\hell\Nether;
@@ -339,6 +341,10 @@ class Server{
 	public $keepInventory = false;
 	public $netherEnabled = false;
 	public $netherName = "nether";
+	public $astralEnabled = false;
+	public $astralName = "astral";
+	public $enderEnabled = false;
+	public $enderName = "ender";
 	public $netherLevel = null;
 	public $weatherRandomDurationMin = 6000;
 	public $weatherRandomDurationMax = 12000;
@@ -1622,6 +1628,10 @@ class Server{
 		$this->keepExperience = $this->getAdvancedProperty("player.keep-experience", false);
 		$this->netherEnabled = $this->getAdvancedProperty("nether.allow-nether", false);
 		$this->netherName = $this->getAdvancedProperty("nether.level-name", "nether");
+		$this->astralEnabled = $this->getAdvancedProperty("astral.allow-astral", false);
+		$this->astralName = $this->getAdvancedProperty("astral.level-name", "astral");
+		$this->enderEnabled = $this->getAdvancedProperty("ender.allow-ender", false);
+		$this->enderName = $this->getAdvancedProperty("ender.level-name", "ender");
 		$this->weatherRandomDurationMin = $this->getAdvancedProperty("level.weather-random-duration-min", 6000);
 		$this->weatherRandomDurationMax = $this->getAdvancedProperty("level.weather-random-duration-max", 12000);
 		$this->hungerHealth = $this->getAdvancedProperty("player.hunger-health", 10);
@@ -1994,6 +2004,9 @@ class Server{
 			Generator::addGenerator(Nether::class, "hell");
 			Generator::addGenerator(Nether::class, "nether");
 			Generator::addGenerator(VoidGenerator::class, "void");
+			Generator::addGenerator(Ender::class, "ender");
+			Generator::addGenerator(Astral::class, "astral");
+			
 
 			foreach((array) $this->getProperty("worlds", []) as $name => $worldSetting){
 				if($this->loadLevel($name) === false){
@@ -2048,6 +2061,20 @@ class Server{
 					$this->generateLevel($this->netherName, time(), Generator::getGenerator("nether"));
 				}
 				$this->netherLevel = $this->getLevelByName($this->netherName);
+			}
+
+			if($this->enderEnabled){
+				if(!$this->loadLevel($this->enderName)){
+					$this->generateLevel($this->enderName, time(), Generator::getGenerator("ender"));
+				}
+				$this->enderLevel = $this->getLevelByName($this->enderName);
+			}
+
+			if($this->astralEnabled){
+				if(!$this->loadLevel($this->astralName)){
+					$this->generateLevel($this->astralName, time(), Generator::getGenerator("astral"));
+				}
+				$this->astralLevel = $this->getLevelByName($this->astralName);
 			}
 
 			if($this->getProperty("ticks-per.autosave", 6000) > 0){

@@ -42,6 +42,18 @@ nether:
  allow-nether: true
  #The name of nether's level
  level-name: "nether"
+
+astral:
+ #Choose if the Astral dimension is allowed; the Astral level will generate automatically (with seed-based glowstone islands)
+ allow-astral: true
+ #The name of the Astral level
+ level-name: "astral"
+
+ender:
+ #Choose if the real End dimension (GenisysPro, with obsidian pillars) is allowed; the End level generates automatically
+ allow-ender: true
+ #The name of the End level
+ level-name: "ender"
  
 server:
  #Pregenerate the experience data，0=disabled

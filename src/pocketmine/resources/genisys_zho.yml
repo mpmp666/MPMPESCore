@@ -42,6 +42,18 @@ nether:
  allow-nether: true
  #地獄地圖名
  level-name: "nether"
+
+astral:
+ #是否允許星界，打開此選項會自動生成星界地圖 (含按種子分布的螢石島)
+ allow-astral: true
+ #星界地圖名
+ level-name: "astral"
+
+ender:
+ #是否允許末地 (GenisysPro 真末地, 含黑曜石柱)，打開此選項會自動生成末地地圖
+ allow-ender: true
+ #末地地圖名
+ level-name: "ender"
  
 server:
  #經驗數據預生成，0不啟用

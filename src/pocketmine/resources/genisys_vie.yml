@@ -42,6 +42,18 @@ nether:
  allow-nether: true
  #Đặt tên cho thế giới địa ngục của bạn.
  level-name: "nether"
+
+astral:
+ #Bật/tắt nếu muốn thêm Astral vào server, khi bật server sẽ tự tạo thế giới Astral (true/false), có các đảo glowstone theo seed
+ allow-astral: true
+ #Đặt tên cho thế giới Astral của bạn.
+ level-name: "astral"
+
+ender:
+ #Bật/tắt nếu muốn thêm The End thật (GenisysPro, có cột obsidian) vào server, tự tạo thế giới End (true/false)
+ allow-ender: true
+ #Đặt tên cho thế giới End của bạn.
+ level-name: "ender"
  
 server:
  #Tái tạo lại hệ thống điểm kinh nghiệm，0=hủy bỏ chế đọ

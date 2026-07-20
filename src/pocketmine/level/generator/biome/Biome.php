@@ -34,6 +34,7 @@ use pocketmine\level\generator\normal\biome\RiverBiome;
 use pocketmine\level\generator\normal\biome\SmallMountainsBiome;
 use pocketmine\level\generator\normal\biome\TaigaBiome;
 use pocketmine\level\generator\hell\HellBiome;
+use pocketmine\level\generator\ender\EnderBiome;
 use pocketmine\level\generator\populator\Populator;
 use pocketmine\utils\Random;
 
@@ -51,6 +52,7 @@ abstract class Biome{
 	const RIVER = 7;
 
 	const HELL = 8;
+	const END = 9;
 
 	const ICE_PLAINS = 12;
 
@@ -115,6 +117,7 @@ abstract class Biome{
 
 		self::register(self::SMALL_MOUNTAINS, new SmallMountainsBiome());
 		self::register(self::HELL, new HellBiome());
+		self::register(self::END, new EnderBiome());
 
 		self::register(self::BIRCH_FOREST, new ForestBiome(ForestBiome::TYPE_BIRCH));
 	}

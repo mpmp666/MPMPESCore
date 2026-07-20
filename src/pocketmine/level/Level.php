@@ -726,6 +726,11 @@ class Level implements ChunkManager, Metadatable{
 		if($this->stopTime == true){
 			return;
 		}else{
+			// 末地(ender)维度: 时间永远锁定夜晚, 不推进
+			if($this->folderName === "ender"){
+				$this->time = Level::TIME_NIGHT;
+				return;
+			}
 			$this->time += 1;
 			//The below code should not be necessary now that AIs for monsters which burn have been fixed
 			//Now can allow time to continue to day 2, day 3, day 4, etc.
