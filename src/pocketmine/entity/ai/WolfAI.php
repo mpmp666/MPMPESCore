@@ -87,14 +87,14 @@ class WolfAI{
 					$zom['z'] = $zo->getZ();
 				}
 				$zom = &$this->AIHolder->Wolf[$zo->getId()];
-				if($this->AIHolder->willMove($zo)){
-					if($zom['gotimer'] == 0 or $zom['gotimer'] == 10){
+				if(true){
+					if(($zom['gotimer'] ?? 0) == 0 or $zom['gotimer'] == 10){
 						$newmx = mt_rand(-5, 5) / 10;
-						while(abs($newmx - $zom['motionx']) >= 0.7){
+						while(abs($newmx - ($zom['motionx'] ?? 0)) >= 0.7){
 							$newmx = mt_rand(-5, 5) / 10;
 						}
 						$newmz = mt_rand(-5, 5) / 10;
-						while(abs($newmz - $zom['motionz']) >= 0.7){
+						while(abs($newmz - ($zom['motionz'] ?? 0)) >= 0.7){
 							$newmz = mt_rand(-5, 5) / 10;
 						}
 						$zom['motionx'] = $newmx;
@@ -114,7 +114,6 @@ class WolfAI{
 				if($zo->isSitting()) continue;
 				if(!isset($this->AIHolder->Wolf[$zo->getId()])) continue;
 				$zom = &$this->AIHolder->Wolf[$zo->getId()];
-				if(!$this->AIHolder->willMove($zo)) continue;
 				$mx = $zom['motionx'] ?? 0;
 				$mz = $zom['motionz'] ?? 0;
 				$pos = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
