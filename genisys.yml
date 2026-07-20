@@ -31,9 +31,9 @@ player:
  #背包格数
  inventory-num: 36
  #是否开启切换模式自动清除背包
- auto-clear-inventory: true
+ auto-clear-inventory: false
  #是否开启死亡经验不掉落
- keep-experience: false
+ keep-experience: true
  #如果玩家进入游戏时崩溃, 请设置低于10的值. 禁用 = -1
  chunk-radius: -1
  

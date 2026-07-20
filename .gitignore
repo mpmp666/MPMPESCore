@@ -18,3 +18,8 @@ worlds/
 PocketMine-MP-5.44.3/
 # 备份压缩包
 *.zip
+*.bak.*
+*.bak
+server.properties
+pocketmine.yml
+genisys.yml
