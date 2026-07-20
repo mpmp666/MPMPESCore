@@ -10,11 +10,16 @@ use pocketmine\entity\Sheep;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
 use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\block\Block;
 
 /*
  * SheepAI - 复用 CowAI 已验证正常的随机行走逻辑, 仅限定 Sheep 实体
  * (原 SheepAI 的 SheepRandomWalkCalc 用 IsChasing 包裹 + SheepRandomWalk 又独立搞坠落逻辑,
  *  两套坐标更新互相打架导致羊飘/穿地, 这里直接用牛的逻辑)
+ *
+ * 新增 (2026-07-20): 原版 0.14.3 EatBlockGoal 等价行为
+ *  - 对应 libminecraftpe.so 导出符号 EatBlockGoal (逆向确认存在)
+ *  - 生命周期: canUse(随机间隔+站立) -> start(低头计时) -> tick(吃草: 脚下草方块变泥土) -> stop(恢复)
  */
 class SheepAI{
 
@@ -40,6 +45,11 @@ class SheepAI{
 				$this,
 				"array_clear"
 			]), 20 * 5);
+			// 原版 0.14.3 EatBlockGoal: 羊低头吃草
+			$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+				$this,
+				"SheepEatGrass"
+			]), 20);
 		}
 	}
 
@@ -76,6 +86,10 @@ class SheepAI{
 								'drop' => false,
 								'canAttack' => 0,
 								'knockBack' => false,
+								// --- EatBlockGoal 状态 ---
+								'eating' => false,
+								'eatTimer' => 0,
+								'eatCooldown' => mt_rand(10, 40),
 							);
 							$zom = &$this->AIHolder->Sheep[$zo->getId()];
 							$zom['x'] = $zo->getX();
@@ -209,5 +223,47 @@ class SheepAI{
 		}
 	}
 
+	/*
+	 * EatBlockGoal - 原版 0.14.3 Sheep 吃草行为 (逆向符号 EatBlockGoal 确认)
+	 * 每 20 tick 跑一次, 状态机:
+	 *   canUse : 站立 + 未在吃 + 冷却结束 + 随机概率 -> start
+	 *   start  : eating=true, eatTimer=0 (低头)
+	 *   tick   : eatTimer 累加, 到 40 tick 完成 -> 脚下草方块变泥土 -> stop
+	 *   stop   : eating=false, 重置冷却
+	 * 注: 原版低头用 DATA_FLAG_EATING, 本核心 Entity 无此常量,
+	 *      故仅做方块变换 + 站立判定, 不引用未定义 flag (避免致命错误)
+	 */
+	public function SheepEatGrass(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Sheep)) continue;
+				if(!isset($this->AIHolder->Sheep[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Sheep[$zo->getId()];
+
+				if($zom['eating']){
+					// --- tick: 吃草计时 ---
+					$zom['eatTimer'] += 1;
+					if($zom['eatTimer'] >= 40){
+						// --- stop: 吃草完成, 脚下草方块变泥土 ---
+						$pos = new Vector3(floor($zo->getX()), floor($zo->getY()) - 1, floor($zo->getZ()));
+						$block = $level->getBlock($pos);
+						if($block->getId() === Block::GRASS){
+							$level->setBlock($pos, Block::get(Block::DIRT), true, true);
+						}
+						$zom['eating'] = false;
+						$zom['eatTimer'] = 0;
+						$zom['eatCooldown'] = mt_rand(15, 45);
+					}
+				}else{
+					// --- canUse: 冷却递减, 到点按概率触发 ---
+					$zom['eatCooldown'] -= 1;
+					if($zom['eatCooldown'] <= 0 and mt_rand(0, 100) < 8){
+						$zom['eating'] = true;
+						$zom['eatTimer'] = 0;
+					}
+				}
+			}
+		}
+	}
 
 }

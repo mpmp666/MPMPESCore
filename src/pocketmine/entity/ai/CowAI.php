@@ -12,6 +12,7 @@ use pocketmine\entity\Cow;
 use pocketmine\entity\Mooshroom;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
+use pocketmine\item\Item;
 
 class CowAI{
 
@@ -33,6 +34,19 @@ class CowAI{
 				$this,
 				"CowRandomWalk"
 			]), 10);
+			/*	$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+				$this,
+				"array_clear"
+			] ), 20 * 5);*/
+		// 原版 0.14.3 TemptGoal / PanicGoal 等价行为
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"CowTempt"
+		]), 8);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"CowPanic"
+		]), 4);
 			/*	$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 					$this,
 					"array_clear"
@@ -218,6 +232,73 @@ class CowAI{
 				}
 			}
 		}
+	}
+
+
+	/*
+	 * TemptGoal - 原版 0.14.3: 手持小麦时牛跟随玩家
+	 * canUse: 附近玩家手持 wheat 且未在 panic -> start
+	 * tick  : 朝玩家移动 (覆盖随机走 motion), 距离过近则停下
+	 */
+	public function CowTempt(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Cow)) continue;
+				if(!isset($this->AIHolder->Cow[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Cow[$zo->getId()];
+				if(!empty($zom['panic'])) continue; // PanicGoal 优先
+
+				// canUse: 找手持小麦的玩家
+				$target = null;
+				foreach($level->getPlayers() as $p){
+					$item = $p->getInventory()->getItemInHand();
+					if($item->getId() === Item::WHEAT){
+						$dist = $zo->distance($p);
+						if($dist < 8) { $target = $p; break; }
+					}
+				}
+				if($target !== null){
+					// start/tick: 朝玩家走
+					$dx = $target->x - $zo->x;
+					$dz = $target->z - $zo->z;
+					$len = sqrt($dx*$dx + $dz*$dz) ?: 1;
+					if($len > 1.2){ // 太近就停, 避免贴脸
+						$zom['motionx'] = $dx / $len * 0.4;
+							$zom['motionz'] = $dz / $len * 0.4;
+							$zom['IsChasing'] = true;
+						}
+					}
+				}
+			}
+	}
+
+	/*
+	 * PanicGoal - 原版 0.14.3: 受伤后短暂乱跑
+	 * canUse: 实体 hurt 计时 < 10 (受伤后倒计时) -> start
+	 * tick  : 随机高速 motion, 计时递减
+	 * stop   : 计时归零, 恢复
+	 */
+	public function CowPanic(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Cow)) continue;
+				if(!isset($this->AIHolder->Cow[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Cow[$zo->getId()];
+
+				if(!isset($zom['panic'])) $zom['panic'] = 0;
+				if($zom['hurt'] < 10){ // hurt 在 RandomWalkCalc 里被设为受伤后倒计时
+					$zom['panic'] = 60; // 受伤触发 60 tick 恐慌
+				}
+				if($zom['panic'] > 0){
+					$zom['panic'] -= 1;
+					$zom['motionx'] = mt_rand(-10, 10) / 10 * 0.6;
+					$zom['motionz'] = mt_rand(-10, 10) / 10 * 0.6;
+					$zom['IsChasing'] = true;
+				} else {
+					$zom['IsChasing'] = false;
+				}
+				}
+			}
 	}
 
 	public function array_clear(){

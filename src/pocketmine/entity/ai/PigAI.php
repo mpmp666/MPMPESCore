@@ -7,6 +7,7 @@ use pocketmine\entity\Entity;
 use pocketmine\entity\Pig;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
+use pocketmine\item\Item;
 
 /*
  * PigAI - 复用 CowAI 已验证正常的随机行走逻辑, 仅限定 Pig 实体
@@ -32,6 +33,15 @@ class PigAI{
 				$this,
 				"PigRandomWalk"
 			]), 10);
+		// 原版 0.14.3 TemptGoal / PanicGoal 等价行为
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"PigTempt"
+		]), 8);
+		$this->AIHolder->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([
+			$this,
+			"PigPanic"
+		]), 4);
 		}
 	}
 
@@ -186,6 +196,64 @@ class PigAI{
 		}
 	}
 
+	/*
+	 * TemptGoal - 原版 0.14.3: 手持胡萝卜时猪跟随玩家 (猪用 CARROT, 牛用 WHEAT)
+	 */
+	public function PigTempt(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Pig)) continue;
+				if(!isset($this->AIHolder->Pig[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Pig[$zo->getId()];
+				if(!empty($zom['panic'])) continue;
+
+				$target = null;
+				foreach($level->getPlayers() as $p){
+					$item = $p->getInventory()->getItemInHand();
+					if($item->getId() === Item::CARROT or $item->getId() === Item::POTATO or $item->getId() === Item::BEETROOT){
+						$dist = $zo->distance($p);
+						if($dist < 8) { $target = $p; break; }
+					}
+				}
+				if($target !== null){
+					$dx = $target->x - $zo->x;
+					$dz = $target->z - $zo->z;
+					$len = sqrt($dx*$dx + $dz*$dz) ?: 1;
+					if($len > 1.2){
+						$zom['motionx'] = $dx / $len * 0.4;
+						$zom['motionz'] = $dz / $len * 0.4;
+						$zom['IsChasing'] = true;
+					}
+				}
+			}
+		}
+	}
+
+	/*
+	 * PanicGoal - 原版 0.14.3: 受伤后短暂乱跑
+	 */
+	public function PigPanic(){
+		foreach($this->AIHolder->getServer()->getLevels() as $level){
+			foreach($level->getEntities() as $zo){
+				if(!($zo instanceof Pig)) continue;
+				if(!isset($this->AIHolder->Pig[$zo->getId()])) continue;
+				$zom = &$this->AIHolder->Pig[$zo->getId()];
+
+				if(!isset($zom['panic'])) $zom['panic'] = 0;
+				if($zom['hurt'] < 10){
+					$zom['panic'] = 60;
+				}
+				if($zom['panic'] > 0){
+					$zom['panic'] -= 1;
+					$zom['motionx'] = mt_rand(-10, 10) / 10 * 0.6;
+					$zom['motionz'] = mt_rand(-10, 10) / 10 * 0.6;
+					$zom['IsChasing'] = true;
+				} else {
+					$zom['IsChasing'] = false;
+				}
+			}
+		}
+	}
 	public function array_clear(){
 		if(count($this->AIHolder->Pig) != 0){
 			foreach($this->AIHolder->Pig as $eid => $info){
