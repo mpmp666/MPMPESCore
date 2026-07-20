@@ -28,6 +28,8 @@ class Painting extends Item{
 	}
 
 	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+		// 临时禁用: 服务端不再生成画实体(放置行为直接拦截), 避免客户端需手动删画
+		return false;
 		if($target->isTransparent() === false and $face > 1 and $block->isSolid() === false){
 			// 修复画朝向: 原表整体转了 180 度导致正反面颠倒("面不对")
 			// 对齐 MCPE 0.14.3 原版 SO: 客户端 AddPaintingPacket.direction*90=画朝向, 画背贴被点墙面
@@ -91,7 +93,8 @@ class Painting extends Item{
 				}
 			}
 
-			$motive = $motives[mt_rand(0, count($validMotives) - 1)];
+			if(count($validMotives) === 0){ $validMotives = [$motives[0]]; }
+			$motive = $validMotives[mt_rand(0, count($validMotives) - 1)];
 			$data = [
 				"x" => $target->x,
 				"y" => $target->y,

@@ -853,7 +853,7 @@ class Item{
 			self::addCreativeItem(Item::get(Item::IRON_BARS, 0));
 			self::addCreativeItem(Item::get(Item::BED, 0));
 			self::addCreativeItem(Item::get(Item::BOOKSHELF, 0));
-			self::addCreativeItem(Item::get(Item::PAINTING, 0));
+			// 已禁用: 创造背包不再提供画(PAINTING), 从源头避免放置问题
 			self::addCreativeItem(Item::get(Item::ITEM_FRAME, 0));
 			self::addCreativeItem(Item::get(Item::WORKBENCH, 0));
 			self::addCreativeItem(Item::get(Item::STONECUTTER, 0));
