@@ -1769,16 +1769,6 @@ class Level implements ChunkManager, Metadatable{
 			return false;
 		}
 
-		// 剪毛优先: 手持剪刀右键羊 -> shear() (MCPE 0.14.3 补全), 放在 AIR 检查前确保命中
-		if($player !== null and $item->getId() === Item::SHEARS){
-			$fx_ = floor($vector->x); $fy_ = floor($vector->y); $fz_ = floor($vector->z);
-			$bb = new \pocketmine\level\AxisAlignedBB($fx_ - 0.5, $fy_ - 0.5, $fz_ - 0.5, $fx_ + 1.5, $fy_ + 2.5, $fz_ + 1.5);
-			foreach($this->getNearbyEntities($bb) as $e){
-				if($e instanceof \pocketmine\entity\Sheep and $e->shear($player)){
-					return true;
-				}
-			}
-		}
 		if($target->getId() === Item::AIR){
 			return false;
 		}

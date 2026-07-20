@@ -3243,7 +3243,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				}
 
 				if($packet->action === InteractPacket::ACTION_RIGHT_CLICK){
-					if($target instanceof Animal and $this->getInventory()->getItemInHand()){
+					$hand = $this->getInventory()->getItemInHand();
+					// 剪毛: 手持剪刀右键羊 (MCPE 0.14.3 补全, 核心原无)
+					if($target instanceof \pocketmine\entity\Sheep and $hand->getId() === Item::SHEARS){
+						if($target->shear($this)){
+							break;
+						}
+					}
+					if($target instanceof Animal and $hand){
 						//TODO: Feed
 					}
 					break;

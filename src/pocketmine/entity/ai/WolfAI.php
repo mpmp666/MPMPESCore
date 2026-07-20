@@ -53,41 +53,41 @@ class WolfAI{
 			foreach($level->getEntities() as $zo){
 				if(!($zo instanceof Wolf)) continue;
 				if($zo->isSitting()) continue; // 坐下不随机走
-				if($this->AIHolder->willMove($zo)){
-					if(!isset($this->AIHolder->Wolf[$zo->getId()])){
-						$this->AIHolder->Wolf[$zo->getId()] = array(
-							'ID' => $zo->getId(),
-							'IsChasing' => false,
-							'motionx' => 0,
-							'motiony' => 0,
-							'motionz' => 0,
-							'hurt' => 10,
-							'time' => 10,
-							'x' => 0,
-							'y' => 0,
-							'z' => 0,
-							'oldv3' => $zo->getLocation(),
-							'yup' => 20,
-							'up' => 0,
-							'yaw' => $zo->yaw,
-							'pitch' => 0,
-							'level' => $zo->getLevel()->getName(),
-							'xxx' => 0,
-							'zzz' => 0,
-							'gotimer' => 10,
-							'swim' => 0,
-							'jump' => 0.01,
-							'canjump' => true,
-							'drop' => false,
-							'canAttack' => 0,
-							'knockBack' => false,
-						);
-						$zom = &$this->AIHolder->Wolf[$zo->getId()];
-						$zom['x'] = $zo->getX();
-						$zom['y'] = $zo->getY();
-						$zom['z'] = $zo->getZ();
-					}
+				if(!isset($this->AIHolder->Wolf[$zo->getId()])){
+					$this->AIHolder->Wolf[$zo->getId()] = array(
+						'ID' => $zo->getId(),
+						'IsChasing' => false,
+						'motionx' => 0,
+						'motiony' => 0,
+						'motionz' => 0,
+						'hurt' => 10,
+						'time' => 10,
+						'x' => 0,
+						'y' => 0,
+						'z' => 0,
+						'oldv3' => $zo->getLocation(),
+						'yup' => 20,
+						'up' => 0,
+						'yaw' => $zo->yaw,
+						'pitch' => 0,
+						'level' => $zo->getLevel()->getName(),
+						'xxx' => 0,
+						'zzz' => 0,
+						'gotimer' => 10,
+						'swim' => 0,
+						'jump' => 0.01,
+						'canjump' => true,
+						'drop' => false,
+						'canAttack' => 0,
+						'knockBack' => false,
+					);
 					$zom = &$this->AIHolder->Wolf[$zo->getId()];
+					$zom['x'] = $zo->getX();
+					$zom['y'] = $zo->getY();
+					$zom['z'] = $zo->getZ();
+				}
+				$zom = &$this->AIHolder->Wolf[$zo->getId()];
+				if($this->AIHolder->willMove($zo)){
 					if($zom['gotimer'] == 0 or $zom['gotimer'] == 10){
 						$newmx = mt_rand(-5, 5) / 10;
 						while(abs($newmx - $zom['motionx']) >= 0.7){
