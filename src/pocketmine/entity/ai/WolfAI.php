@@ -165,7 +165,7 @@ class WolfAI{
 				}
 				$pk3 = new SetEntityMotionPacket;
 				$pk3->entities = [
-					[$zo->getID(), $zom['xxx'], $zom['jump'] - $downly ? 0.04 : 0, $zom['zzz']]
+					[$zo->getID(), ($zom['xxx'] ?? 0), $zom['jump'] - $downly ? 0.04 : 0, ($zom['zzz'] ?? 0)]
 				];
 				foreach($zo->getViewers() as $pl){
 					$pl->dataPacket($pk3);
