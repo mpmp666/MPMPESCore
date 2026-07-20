@@ -29,6 +29,7 @@ use pocketmine\entity\Entity;
 
 use pocketmine\event\block\BlockBurnEvent;
 use pocketmine\item\Item;
+use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\Tool;
 use pocketmine\level\Level;
 use pocketmine\level\MovingObjectPosition;
@@ -978,6 +979,14 @@ class Block extends Position implements Metadatable{
 
 		if($item->isSword()){
 			$base *= 0.5;
+		}
+
+		// 效率附魔: 手持效率工具且能破坏该方块时提速 (level^2+1)
+		if($this->canBeBrokenWith($item)){
+			$eff = $item->getEnchantmentLevel(Enchantment::TYPE_MINING_EFFICIENCY);
+			if($eff > 0){
+				$base /= ($eff * $eff + 1);
+			}
 		}
 
 		return $base;

@@ -1,6 +1,7 @@
 <?php
 
 namespace pocketmine\entity\ai;
+use pocketmine\block\Block;
 
 use pocketmine\entity\Ocelot;
 use pocketmine\entity\Pig;

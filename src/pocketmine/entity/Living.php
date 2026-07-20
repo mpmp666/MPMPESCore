@@ -20,6 +20,7 @@
 */
 
 namespace pocketmine\entity;
+use pocketmine\item\enchantment\Enchantment;
 
 
 use pocketmine\block\Block;
@@ -163,7 +164,27 @@ abstract class Living extends Entity implements Damageable{
 			return;
 		}
 		parent::kill();
-		$this->server->getPluginManager()->callEvent($ev = new EntityDeathEvent($this, $this->getDrops()));
+		// 抢夺附魔: 提高掉落数量/概率
+		$drops = $this->getDrops();
+		$looting = 0;
+		if($this->lastDamageCause instanceof EntityDamageByEntityEvent){
+			$damager = $this->lastDamageCause->getDamager();
+			if($damager instanceof \pocketmine\Player){
+				$inv = $damager->getInventory();
+				if($inv !== null){
+					$item = $inv->getItemInHand();
+					$looting = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
+				}
+			}
+		}
+		if($looting > 0 and count($drops) > 0){
+			// 每个掉落物数量 +mt_rand(0, looting)
+			foreach($drops as $k => $d){
+				$add = mt_rand(0, $looting);
+				if($add > 0) $drops[$k] = ItemItem::get($d->getId(), $d->getDamage(), $d->getCount() + $add);
+			}
+		}
+		$this->server->getPluginManager()->callEvent($ev = new EntityDeathEvent($this, $drops));
 		foreach($ev->getDrops() as $item){
 			$this->getLevel()->dropItem($this, $item);
 		}

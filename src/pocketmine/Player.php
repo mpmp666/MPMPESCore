@@ -47,6 +47,7 @@ use pocketmine\event\block\SignChangeEvent;
 use pocketmine\event\entity\EntityDamageByBlockEvent;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\item\enchantment\Enchantment;
 use pocketmine\event\entity\EntityEatItemEvent;
 use pocketmine\event\entity\EntityRegainHealthEvent;
 use pocketmine\event\entity\EntityShootBowEvent;
@@ -3018,6 +3019,22 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 								$f = min((($p ** 2) + $p * 2) / 3, 1) * 2;
 								$ev = new EntityShootBowEvent($this, $bow, Entity::createEntity("Arrow", $this->chunk, $nbt, $this, $f == 2 ? true : false), $f);
 
+							// ===== 弓附魔生效 (MCPE 0.14.3) =====
+							$power = $bow->getEnchantmentLevel(Enchantment::TYPE_BOW_POWER);
+							$flame = $bow->getEnchantmentLevel(Enchantment::TYPE_BOW_FLAME);
+							$infinity = $bow->getEnchantmentLevel(Enchantment::TYPE_BOW_INFINITY);
+							// 力量: 每级 +25% 力 (最高V=+125%), 影响射程与伤害
+							if($power > 0){
+								$newForce = $f * (1 + $power * 0.25);
+								$ev->setForce(min($newForce, 2 * (1 + 5 * 0.25))); // 封顶
+							}
+							// 火矢: 箭带火
+							if($flame > 0){
+								$ev->getProjectile()->setOnFire($flame * 4 * 20); // 每级4秒
+							}
+							// 无限: 标记不消耗箭
+							$bowInfinity = $infinity > 0;
+
 								if($f < 0.1 or $diff < 5){
 									$ev->setCancelled();
 								}
@@ -3030,7 +3047,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 								}else{
 									$ev->getProjectile()->setMotion($ev->getProjectile()->getMotion()->multiply($ev->getForce()));
 									if($this->isSurvival()){
-										$this->inventory->removeItem(Item::get(Item::ARROW, 0, 1));
+										if(!$bowInfinity){
+											$this->inventory->removeItem(Item::get(Item::ARROW, 0, 1));
+										}
 										$bow->setDamage($bow->getDamage() + 1);
 										if($bow->getDamage() >= 385){
 											$this->inventory->setItemInHand(Item::get(Item::AIR, 0, 0));
@@ -3294,6 +3313,26 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						EntityDamageEvent::MODIFIER_BASE => isset($damageTable[$item->getId()]) ? $damageTable[$item->getId()] : 1,
 					];
 
+					// ===== 武器附魔生效 (MCPE 0.14.3) =====
+					$sharp = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_SHARPNESS);
+					$smite = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_SMITE);
+					$arthr = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_ARTHROPODS);
+					$kbEnch = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_KNOCKBACK);
+					$fire = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_FIRE_ASPECT);
+					$loot = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
+					// 额外伤害: 锋利每级+1(满V=5); 亡灵只对亡灵+; 节肢只对节肢+
+					$extra = 0;
+					if($sharp > 0) $extra += $sharp; // 锋利: +1/级
+					if($smite > 0 and ($target instanceof \pocketmine\entity\Zombie or $target instanceof \pocketmine\entity\Skeleton)) $extra += $smite * 2.5; // 亡灵+2.5/级
+					if($arthr > 0 and ($target instanceof \pocketmine\entity\Spider or $target instanceof \pocketmine\entity\CaveSpider)) $extra += $arthr * 2.5; // 节肢+2.5/级
+					if($extra > 0){
+						$damage[EntityDamageEvent::MODIFIER_BASE] += $extra;
+					}
+					// 击退附魔: 提高 knockBack
+					$weaponKnockBack = 0.4 + $kbEnch * 0.5; // 每级+0.5
+					// 火焰附加: 点燃目标
+					$weaponFire = $fire;
+
 					if(!$this->canInteract($target, 8)){
 						$cancelled = true;
 					}elseif($target instanceof Player){
@@ -3304,7 +3343,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						}
 					}
 
-					$ev = new EntityDamageByEntityEvent($this, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, $damage);
+					$ev = new EntityDamageByEntityEvent($this, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, $damage, $weaponKnockBack);
+					// 火焰附加: 命中点燃目标
+					if($weaponFire > 0 and $target->isAlive()){
+						$target->setOnFire($weaponFire * 4 * 20); // 每级4秒
+					}
+					// 抢夺: 暂存到事件, 由实体死亡掉落处读取 (见 EntityDeathEvent 处理)
 					if($cancelled){
 						$ev->setCancelled();
 					}

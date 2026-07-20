@@ -1387,8 +1387,8 @@ class Item{
 			if($entry["id"] === $id){
 				$e = Enchantment::getEnchantment($entry["id"]);
 				$e->setLevel($entry["lvl"]);
-				$E_level = $e->getLevel() > Enchantment::getEnchantMaxLevel($id) ? Enchantment::getEnchantMaxLevel($id) : $e->getLevel();
-				return $E_level;
+				// 放开原版上限截断: 超上限等级(如200级锋利)真实生效, 不再被打回上限
+				return $e->getLevel();
 			}
 		}
 
