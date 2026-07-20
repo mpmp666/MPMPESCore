@@ -8,6 +8,7 @@ use pocketmine\entity\Entity;
 use pocketmine\entity\Wolf;
 use pocketmine\entity\Monster;
 use pocketmine\scheduler\CallbackTask;
+use pocketmine\network\protocol\SetEntityMotionPacket;
 use pocketmine\item\Item;
 
 /*
@@ -130,7 +131,7 @@ class WolfAI{
 					$zom['yaw'] = $yaw;
 					$zom['pitch'] = 0;
 				}
-				if(!$zom['knockBack']){
+				if(!($zom['knockBack'] ?? false)){
 					$zom['x'] = $pos2->getX();
 					$zom['z'] = $pos2->getZ();
 					$zom['y'] = $pos2->getY();
@@ -150,7 +151,9 @@ class WolfAI{
 				if(!isset($this->AIHolder->Wolf[$zo->getId()])) continue;
 				$zom = &$this->AIHolder->Wolf[$zo->getId()];
 				$downly = $zo->onGround;
-				if(abs($zo->getY() - $zom['oldv3']->y) == 1 and $zom['canjump'] === true){
+				$oldv3 = $zom['oldv3'] ?? null;
+					$oldY = ($oldv3 !== null) ? $oldv3->y : $zo->getY();
+					if(abs($zo->getY() - $oldY) == 1 and $zom['canjump'] === true){
 					$zom['canjump'] = false;
 					$zom['jump'] = 0.3;
 				}else{

@@ -17,6 +17,8 @@ use pocketmine\level\format\FullChunk;
 use pocketmine\nbt\tag\CompoundTag;
 
 class Sheep extends Animal implements Colorable{
+	const DATA_FLAG_SHEARED = 12; // MCPE 0.14.3 羊剪毛视觉标记 (Entity 未定义, 此处补)
+
 	const NETWORK_ID = 13;
 
 	const DATA_COLOR_INFO = 16;
@@ -102,6 +104,8 @@ class Sheep extends Animal implements Colorable{
 		$item = $player->getInventory()->getItemInHand();
 		if($item->getId() !== ItemItem::SHEARS) return false;
 		$this->sheared = true;
+		$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_SHEARED, true);
+		$this->sendData($this->getViewers()); // 同步客户端: 羊变秃
 		$this->namedtag->Sheared = new ByteTag("Sheared", 1);
 		// 掉落 1-3 有色羊毛
 		$count = mt_rand(1, 3);
