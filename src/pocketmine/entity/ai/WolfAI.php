@@ -88,23 +88,23 @@ class WolfAI{
 					$zom['z'] = $zo->getZ();
 				}
 				$zom = &$this->AIHolder->Wolf[$zo->getId()];
-				if($zom['gotimer'] == 0 or $zom['gotimer'] == 10){
+				if(($zom['gotimer'] ?? 0) == 0 or ($zom['gotimer'] ?? 0) == 10){
 					$newmx = mt_rand(-5, 5) / 10;
-					while(abs($newmx - $zom['motionx']) >= 0.7){
+					while(abs($newmx - ($zom['motionx'] ?? 0)) >= 0.7){
 						$newmx = mt_rand(-5, 5) / 10;
 					}
 					$zom['motionx'] = $newmx;
 					$newmz = mt_rand(-5, 5) / 10;
-					while(abs($newmz - $zom['motionz']) >= 0.7){
+					while(abs($newmz - ($zom['motionz'] ?? 0)) >= 0.7){
 						$newmz = mt_rand(-5, 5) / 10;
 					}
 					$zom['motionz'] = $newmz;
-				}elseif($zom['gotimer'] >= 20 and $zom['gotimer'] <= 24){
+				}elseif(($zom['gotimer'] ?? 0) >= 20 and ($zom['gotimer'] ?? 0) <= 24){
 					$zom['motionx'] = 0;
 					$zom['motionz'] = 0;
 				}
-				$zom['gotimer'] += 0.5;
-				if($zom['gotimer'] >= 22) $zom['gotimer'] = 0;
+				$zom['gotimer'] = ($zom['gotimer'] ?? 0) + 0.5;
+				if(($zom['gotimer'] ?? 0) >= 22) $zom['gotimer'] = 0;
 				$zom['yup'] = 0;
 				$zom['up'] = 0;
 				$pos = new Vector3 ($zom['x'] + $zom['motionx'], floor($zo->getY()) + 1, $zom['z'] + $zom['motionz']);
@@ -126,7 +126,7 @@ class WolfAI{
 						$zom['up'] = 0;
 					}
 				}
-				if(!($zom['motionx'] == 0 and $zom['motionz'] == 0)){
+				if(!(($zom['motionx'] ?? 0) == 0 and ($zom['motionz'] ?? 0) == 0)){
 					$yaw = $this->AIHolder->getyaw($zom['motionx'], $zom['motionz']);
 					$zom['yaw'] = $yaw;
 					$zom['pitch'] = 0;
@@ -183,7 +183,7 @@ class WolfAI{
 			foreach($level->getEntities() as $zo){
 				if(!($zo instanceof Wolf)) continue;
 				if(!isset($this->AIHolder->Wolf[$zo->getId()])){
-					$this->AIHolder->Wolf[$zo->getId()] = ['sitting' => false];
+					continue; // 数组尚未由 Calc 初始化, 跳过 (避免建残缺数组导致后续 key undefined)
 				}
 				$zom = &$this->AIHolder->Wolf[$zo->getId()];
 
