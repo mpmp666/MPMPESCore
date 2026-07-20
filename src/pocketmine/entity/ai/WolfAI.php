@@ -114,11 +114,13 @@ class WolfAI{
 				if($zo->isSitting()) continue;
 				if(!isset($this->AIHolder->Wolf[$zo->getId()])) continue;
 				$zom = &$this->AIHolder->Wolf[$zo->getId()];
-				$pos = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
-				$pos->x += $zom['motionx'];
-				$pos->z += $zom['motionz'];
 				if(!$this->AIHolder->willMove($zo)) continue;
-				$zo->setMotion(new Vector3($zom['motionx'] / 10, 0, $zom['motionz'] / 10));
+				$mx = $zom['motionx'] ?? 0;
+				$mz = $zom['motionz'] ?? 0;
+				$pos = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
+				$pos->x += $mx;
+				$pos->z += $mz;
+				$zo->setMotion(new Vector3($mx / 10, 0, $mz / 10));
 			}
 		}
 	}
