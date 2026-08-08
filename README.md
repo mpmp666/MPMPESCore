@@ -64,14 +64,3 @@ MPMPESCore 衍生自 Genisys，Genisys 采用 **LGPL** 许可。MPMPESCore 以�
 - mpmpes（MPMPESCore 的修改）
 
 感谢所有为 MPMPESCore 所基于项目做出贡献的人。
-
-## 测试服
-
-当前在线测试服地址：
-
-- **IP：** `148.100.112.191`
-- **端口（Port）：** `19132`
-- **版本：** Minecraft: 基岩版（MCPE）0.14.x
-- **连接方式：** 在 Minecraft 基岩版客户端的「添加服务器」中填写上述 IP 与端口即可
-
-> 测试服由 mpmpes 维护，服务器名为「金安卓」。
