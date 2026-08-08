@@ -6,6 +6,7 @@
 - 版本：`1.0`
 - 基于：[Genisys](https://github.com/iTXTech/Genisys)（iTX Technologies 出品的 PocketMine-MP 分支）
 - 源码：https://github.com/mpmp666/MPMPESCore
+- 此代码100%AI生成 请勿找茬
 
 > 本核心是基于 Genisys 的修改构建。原版 Genisys 是 iTX Technologies LLC 制作的 PocketMine-MP 分支。
 
