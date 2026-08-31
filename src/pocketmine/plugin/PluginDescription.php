@@ -41,6 +41,9 @@ class PluginDescription{
 
 	private $geniapi;
 
+	/** @var array */
+	private $mpapi = [];
+
 	/**
 	 * @var Permission[]
 	 */
@@ -71,6 +74,10 @@ class PluginDescription{
 			$this->geniapi = ["1.0.0"];
 		}else{
 			$this->geniapi = !is_array($plugin["geniapi"]) ? [$plugin["geniapi"]] : $plugin["geniapi"];
+		}
+		//MPApi: 可选声明;不声明 = 空数组 = 插件不使用/不要求 MPApi
+		if(isset($plugin["mpapi"])){
+			$this->mpapi = !is_array($plugin["mpapi"]) ? [$plugin["mpapi"]] : $plugin["mpapi"];
 		}
 
 		if(stripos($this->main, "pocketmine\\") === 0){
@@ -142,6 +149,16 @@ class PluginDescription{
 	 */
 	public function getCompatibleGeniApis(){
 		return $this->geniapi;
+	}
+
+	/**
+	 * 插件声明要求的 MPApi 版本列表(plugin.yml 的 "mpapi" 字段)。
+	 * 空数组表示插件未声明 MPApi 版本(可正常加载,仅使用普通 API)。
+	 *
+	 * @return array
+	 */
+	public function getMPApi(){
+		return $this->mpapi;
 	}
 
 	/**

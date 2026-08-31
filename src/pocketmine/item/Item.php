@@ -1133,6 +1133,8 @@ class Item{
 			for($i = 0; $i <= 35; $i++){
 				self::addCreativeItem(Item::get(Item::SPLASH_POTION, $i));
 			}
+			//MPApi: 地图物品进创造背包(空地图, 使用后记录周边地形)
+			self::addCreativeItem(Item::get(Item::MAP, 0));
 		}else{
 			$creativeItems = new Config(Server::getInstance()->getFilePath() . "src/pocketmine/resources/creativeitems.json", Config::JSON, []);
 			foreach($creativeItems->getAll() as $item){

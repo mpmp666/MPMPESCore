@@ -55,6 +55,7 @@ class VersionCommand extends VanillaCommand{
 				$sender->getServer()->getiTXApiVersion()
 			]));
 			$sender->sendMessage(TextFormat::WHITE . "PHP Version: " . TextFormat::GOLD . PHP_VERSION . TextFormat::WHITE . " (" . (PHP_ZTS ? "ZTS" : "NTS") . ") on " . PHP_OS);
+			$sender->sendMessage(TextFormat::WHITE . "MPApi Version: " . TextFormat::GOLD . \pocketmine\mpapi\MPApi::VERSION);
 		}else{
 			$pluginName = \implode(" ", $args);
 			$exactPlugin = $sender->getServer()->getPluginManager()->getPlugin($pluginName);

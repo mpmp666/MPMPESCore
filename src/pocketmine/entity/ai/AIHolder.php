@@ -518,6 +518,31 @@ class AIHolder{
 							$array = &$this->snowgolem;
 						}
 						if(isset($array[$entity->getId()])){
+							//MPApi AI 增强: ① 受击恐慌(动物逃离攻击者) ② 闲置生物注视最近玩家
+							if(!empty($array[$entity->getId()]['panic'])){
+								$array[$entity->getId()]['panic']--;
+								$array[$entity->getId()]['motionx'] = $array[$entity->getId()]['panicX'];
+								$array[$entity->getId()]['motionz'] = $array[$entity->getId()]['panicZ'];
+							}elseif($array[$entity->getId()]['motionx'] == 0 and $array[$entity->getId()]['motionz'] == 0 and $array[$entity->getId()]['IsChasing'] === false){
+								$nearest = null;
+								$nearestD = 64;  //8格内才注视
+								foreach($entity->getViewers() as $viewer){
+									$dx = $viewer->x - $entity->x;
+									$dz = $viewer->z - $entity->z;
+									$d = $dx * $dx + $dz * $dz;
+									if($d < $nearestD){
+										$nearestD = $d;
+										$nearest = $viewer;
+									}
+								}
+								if($nearest !== null){
+									$array[$entity->getId()]['yaw'] = $this->getyaw($nearest->x - $entity->x, $nearest->z - $entity->z);
+									$dy = ($nearest->y + $nearest->getEyeHeight()) - ($entity->y + 1.6);
+									$hDist = sqrt($nearestD);
+									$array[$entity->getId()]['pitch'] = $hDist > 0.1 ? rad2deg(asin($dy / sqrt($nearestD + $dy * $dy))) : 0;
+								}
+							}
+
 							$yaw0 = $entity->yaw;  //实际yaw
 							$yaw = $array[$entity->getId()]['yaw']; //目标yaw
 							//$this->getLogger()->info($yaw0.' '.$yaw);
@@ -757,9 +782,18 @@ class AIHolder{
 	}
 
 	public function whatBlock(Level $level, $v3){  //boybook的y轴判断法 核心 什么方块？
-		$block = $level->getBlock($v3);
-		$id = $block->getID();
-		$damage = $block->getDamage();
+		//MPApi 优化: 直接读区块方块状态, 免 getBlock() 的 Block 对象分配(AI 每 tick 大量调用)
+		$x = floor($v3->getX());
+		$y = floor($v3->getY());
+		$z = floor($v3->getZ());
+
+		$chunk = $level->getChunk($x >> 4, $z >> 4, false);
+		if($chunk === null){
+			return "air";  //与 getBlock() 在未加载区块的行为一致
+		}
+		$full = $chunk->getFullBlock($x & 0x0f, $y & 0x7f, $z & 0x0f);
+		$id = $full >> 4;
+		$damage = $full & 0x0f;
 		switch($id){
 			case 0:
 			case 6:
@@ -813,7 +847,8 @@ class AIHolder{
 				}
 				break;
 			case 64:
-				//门
+				//门(需要开合状态, 仅此时物化 Block)
+				$block = $level->getBlock(new Vector3($x, $y, $z));
 				//var_dump($damage." ");
 				//TODO 不知如何判断门是否开启，因为以下条件永远满足
 				if($block->isOpened()){
@@ -989,6 +1024,20 @@ class AIHolder{
 						$zom['IsChasing'] = $p->getName();
 						//var_dump( $zom['IsChasing']);
 					}
+				}
+				//MPApi AI 增强: 动物受击恐慌, 逃离攻击者(40 tick)
+				if(($entity instanceof Cow or $entity instanceof Pig or $entity instanceof Sheep or $entity instanceof Chicken) and $p instanceof Player){
+					$fdx = $entity->x - $p->x;
+					$fdz = $entity->z - $p->z;
+					$len = sqrt($fdx * $fdx + $fdz * $fdz);
+					if($len < 0.01){
+						$fdx = mt_rand(-10, 10) / 10;
+						$fdz = mt_rand(-10, 10) / 10;
+						$len = sqrt($fdx * $fdx + $fdz * $fdz);
+					}
+					$array[$entity->getId()]['panic'] = 40;
+					$array[$entity->getId()]['panicX'] = ($fdx / $len) * 1.2;
+					$array[$entity->getId()]['panicZ'] = ($fdz / $len) * 1.2;
 				}
 			}
 		}

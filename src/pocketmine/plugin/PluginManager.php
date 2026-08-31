@@ -276,6 +276,23 @@ class PluginManager{
 								continue;
 							}
 
+							//MPApi 门控:插件声明了 mpapi 版本时,任一声明版本高于服务端 MPApi 版本则禁用
+							$mpapiVersions = $description->getMPApi();
+							if(count($mpapiVersions) > 0){
+								$mpCompatible = false;
+								foreach($mpapiVersions as $mpVersion){
+									if(version_compare((string) $mpVersion, \pocketmine\mpapi\MPApi::VERSION, "<=")){
+										$mpCompatible = true;
+										break;
+									}
+								}
+
+								if($mpCompatible === false){
+									$this->server->getLogger()->error("Could not load plugin '" . $description->getName() . "': MPApi version " . implode(", ", $mpapiVersions) . " is higher than server MPApi " . \pocketmine\mpapi\MPApi::VERSION . ", plugin disabled");
+									continue;
+								}
+							}
+
 							$plugins[$name] = $file;
 
 							$softDependencies[$name] = (array) $description->getSoftDepend();

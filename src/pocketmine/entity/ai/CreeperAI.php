@@ -249,6 +249,7 @@ class CreeperAI{
 						$pos = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
 						$hatred = false;
 						foreach ($zo->getViewers() as $p) { //获取附近玩家
+							if ($p->isCreative()) continue; // creative: not targeted
 							if ($p->distance($pos) <= $h_r) {  //玩家在仇恨半径内
 								if ($hatred === false) {
 									$hatred = $p;

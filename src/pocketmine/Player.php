@@ -2252,6 +2252,23 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$this->personalCreativeItems = [];
 	}
 
+	/**
+	 * MPApi 地图: 延迟推送地图纹理给本玩家(调度器数组回调, 闭包无法被调度器登记)
+	 *
+	 * @param int   $mapId
+	 * @param array $colors MapColor[y][x]
+	 * @param mixed $task
+	 */
+	public function sendMapTextureDelayed($mapId, array $colors, $task = null){
+		if(!$this->isOnline()){
+			return;
+		}
+		$pk = new \pocketmine\network\protocol\ClientboundMapItemDataPacket();
+		$pk->mapId = $mapId;
+		$pk->colors = $colors;
+		$this->dataPacket($pk);
+	}
+
 	public function getCreativeItems() : array{
 		return $this->personalCreativeItems;
 	}
@@ -2651,6 +2668,10 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($this->isCreative()){ //Creative mode match
 					$item = $packet->item;
 					$slot = Item::getCreativeItemIndex($item);
+					if($slot === -1 and $packet->slot >= 0 and $packet->slot < $this->inventory->getSize() and $this->inventory->getItem($packet->slot)->equals($item, !$item->isTool())){
+						//MPApi 增强: 创造模式下, 背包中真实存在的物品(如填充地图)即使不在创造列表中也允许装备
+						$slot = $packet->slot;
+					}
 				}else{
 					$item = $this->inventory->getItem($packet->slot);
 					$slot = $packet->slot;
@@ -2699,6 +2720,11 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				}
 
 				$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, false);
+				//MPApi 地图: 装备填充地图时按需推送纹理(持久地图或动态缓存, 客户端手持渲染需要)
+				$inHand = $this->inventory->getItemInHand();
+				if($inHand->getId() === Item::FILLED_MAP){
+					\pocketmine\mpapi\MPApi::serveMapRequest($this, $this->level, $inHand->getDamage());
+				}
 				break;
 			case ProtocolInfo::USE_ITEM_PACKET:
 				/** @var UseItemPacket $pk */
@@ -2710,6 +2736,59 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				$blockVector = new Vector3($packet->x, $packet->y, $packet->z);
 
 				$this->craftingType = 0;
+
+				//MPApi 地图(SCAXE 0.14 实现): 手持空地图使用(点空气或点方块) → 以当前位置为中心记录周边地形
+				if($this->inventory->getItemInHand()->getId() === Item::MAP){
+					$item2 = new Item(Item::FILLED_MAP);
+					$mapId = \pocketmine\maps\MapData::get($this->level)->nextId();
+					$item2->setDamage($mapId);  //客户端按 damage 识别地图
+					$item2->setNamedTag(new \pocketmine\nbt\tag\CompoundTag('', [
+						new \pocketmine\nbt\tag\StringTag('map_uuid', (string) $mapId),
+					]));
+
+					$colors = [];
+					for($y = 0; $y < 128; ++$y){
+						for($x = 128; $x >= 0; --$x){
+							$realX = $this->getFloorX() - 64 + $x;
+							$realZ = $this->getFloorZ() - 64 + $y;
+							$maxY = $this->getLevel()->getHighestBlockAt($realX, $realZ);
+							$lastY = $maxY - $this->getLevel()->getHighestBlockAt($realX + 1, $realZ);
+							$block = $this->getLevel()->getBlock(new Vector3($realX, $maxY, $realZ));
+							$colors[$y][$x] = \pocketmine\utils\MapColor::getMapColorByBlock($block, $lastY);
+						}
+					}
+					\pocketmine\maps\MapData::get($this->level)->saveMapData($mapId, $colors);
+					$this->getInventory()->addItem($item2);
+					//创造模式下背包由客户端权威管理, 给完物品必须全量重发背包
+					$this->inventory->sendContents($this);
+
+					//消耗一张空地图(SCAXE 逻辑: 全背包扫描移除, 创造与生存一致, 保证客户端状态同步)
+					$getitem = new Item(Item::MAP);
+					$getcount = $getitem->getCount();
+					for($index = 0; $index < $this->getInventory()->getSize(); ++$index){
+						$setitem = $this->getInventory()->getItem($index);
+						if($getitem->getID() == $setitem->getID() and $getitem->getDamage() == $setitem->getDamage()){
+							if($getcount >= $setitem->getCount()){
+								$getcount -= $setitem->getCount();
+								$this->getInventory()->setItem($index, Item::get(Item::AIR, 0, 1));
+							}elseif($getcount < $setitem->getCount()){
+								$this->getInventory()->setItem($index, Item::get($getitem->getID(), 0, $setitem->getCount() - $getcount));
+								break;
+							}
+						}
+					}
+
+					$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, true);
+					$this->startAction = $this->server->getTick();
+
+					//纹理延迟 10 tick 推送: 客户端需要先登记新物品, 立即发送会被丢弃
+					//注意: 调度器要求可回调必须有字符串形式, 必须用数组回调而不是闭包
+					$this->server->getScheduler()->scheduleDelayedTask(new \pocketmine\scheduler\CallbackTask([
+						$this,
+						"sendMapTextureDelayed"
+					], [$mapId, $colors]), 10);
+					break;
+				}
 
 				if($packet->face >= 0 and $packet->face <= 5){ //Use Block, place
 					$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, false);
@@ -3488,6 +3567,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				}else{
 					unset($this->windowIndex[$packet->windowid]);
 				}
+				break;
+
+			case ProtocolInfo::MAP_INFO_REQUEST_PACKET:
+				if($this->spawned === false){
+					break;
+				}
+				//请求-响应闭环: 持久地图 → 动态地图缓存 → 手持物品 damage 兜底
+				\pocketmine\mpapi\MPApi::serveMapRequest($this, $this->level, $packet->mapId);
 				break;
 
 			case ProtocolInfo::CRAFTING_EVENT_PACKET:

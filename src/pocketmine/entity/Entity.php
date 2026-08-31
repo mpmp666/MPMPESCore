@@ -1193,7 +1193,7 @@ abstract class Entity extends Location implements Metadatable{
 			$bb = clone $this->boundingBox;
 			$bb->minY -= 0.75;
 			$this->onGround = false;
-			if(!$this->level->getBlock(new Vector3($this->x, $this->y - 1, $this->z))->isTransparent())
+			if(!$this->level->getBlock($this->temporalVector->setComponents($this->x, $this->y - 1, $this->z))->isTransparent())
 				$this->onGround = true;
 			/*
                         if(count($this->level->getCollisionBlocks($bb)) > 0){
@@ -1375,25 +1375,7 @@ abstract class Entity extends Location implements Metadatable{
 
 	public function getBlocksAround(){
 		if($this->blocksAround === null){
-			$minX = Math::floorFloat($this->boundingBox->minX);
-			$minY = Math::floorFloat($this->boundingBox->minY);
-			$minZ = Math::floorFloat($this->boundingBox->minZ);
-			$maxX = Math::ceilFloat($this->boundingBox->maxX);
-			$maxY = Math::ceilFloat($this->boundingBox->maxY);
-			$maxZ = Math::ceilFloat($this->boundingBox->maxZ);
-
-			$this->blocksAround = [];
-
-			for($z = $minZ; $z <= $maxZ; ++$z){
-				for($x = $minX; $x <= $maxX; ++$x){
-					for($y = $minY; $y <= $maxY; ++$y){
-						$block = $this->level->getBlock($this->temporalVector->setComponents($x, $y, $z));
-						if($block->hasEntityCollision()){
-							$this->blocksAround[Level::blockHash($block->x, $block->y, $block->z)] = $block;
-						}
-					}
-				}
-			}
+			$this->blocksAround = $this->level->getEntityCollidingBlocks($this->boundingBox);
 		}
 
 		return $this->blocksAround;

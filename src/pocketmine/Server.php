@@ -1947,6 +1947,7 @@ class Server{
 				$this->getCodename(),
 				$this->getApiVersion()
 			]));
+			$this->logger->info("MPApi 版本: " . \pocketmine\mpapi\MPApi::VERSION . " (plugin.yml 可声明 mpapi 版本)");
 			$this->logger->info($this->getLanguage()->translateString("pocketmine.server.license", [$this->getName()]));
 
 			Timings::init();

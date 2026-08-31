@@ -213,9 +213,9 @@ class ZombieAI{
 								if ($zy === false) {  //前方不可前进
 							
 							//	else {
-									$zom['motionx'] = - $zom['motionx'];
-									$zom['motionz'] = - $zom['motionz'];
-									//转向180度，向身后走
+									$zom['motionx'] = -$zom['motionx'] * 0.5 + mt_rand(-3, 3) / 10;
+									$zom['motionz'] = -$zom['motionz'] * 0.5 + mt_rand(-3, 3) / 10;
+									//MPApi AI 增强: 被堵时半折返+随机抖动, 避免原地往返
 									$zom['up'] = 0;
 								//}
 							}
@@ -272,6 +272,7 @@ class ZombieAI{
 						$pos = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
 						$hatred = false;
 						foreach ($zo->getViewers() as $p) {  //获取附近玩家
+							if ($p->isCreative()) continue;  //MPApi AI 增强: 创造模式玩家不会被索敌/靠近
 							if ($p->distance($pos) <= $h_r) {  //玩家在仇恨半径内
 								if ($hatred === false) {
 									$hatred = $p;

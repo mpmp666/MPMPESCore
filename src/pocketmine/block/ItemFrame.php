@@ -61,7 +61,12 @@ class ItemFrame extends Transparent{
 		}
 
 		if($tile->getItem()->getId() === 0){
-			$tile->setItem(Item::get($item->getId(), $item->getDamage(), 1));
+			$item2 = Item::get($item->getId(), $item->getDamage(), 1);
+			if($item->hasCompoundTag()){
+				//MPApi 地图: 保留 NBT(map_uuid), 客户端才能在展示框上渲染对应地图
+				$item2->setCompoundTag($item->getCompoundTag());
+			}
+			$tile->setItem($item2);
 			if($player instanceof Player){
 				if($player->isSurvival()) {
 					$count = $item->getCount();
