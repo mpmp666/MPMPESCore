@@ -55,6 +55,10 @@ class Session{
 	private $sessionManager;
 	private $address;
 	private $port;
+	/** @var string|null PROXY 协议场景下实际回复使用的传输地址(如 frp 本地回环地址) */
+	private $sendAddress;
+	/** @var int|null */
+	private $sendPort;
 	private $state = self::STATE_UNCONNECTED;
 	private $mtuSize = 548; //Min size
 	private $id = 0;
@@ -124,6 +128,15 @@ class Session{
 
 	public function getPort(){
 		return $this->port;
+	}
+
+	/**
+	 * PROXY 协议场景: 回复数据包走传输地址(如 frp 回环隧道),
+	 * 而 getAddress/getPort 继续返回真实客户端地址供上层(封禁/日志)使用。
+	 */
+	public function setTransportAddress($ip, $port){
+		$this->sendAddress = $ip;
+		$this->sendPort = $port;
 	}
 
 	public function getID(){
@@ -206,7 +219,7 @@ class Session{
 	}
 
 	private function sendPacket(Packet $packet){
-		$this->sessionManager->sendPacket($packet, $this->address, $this->port);
+		$this->sessionManager->sendPacket($packet, $this->sendAddress ?? $this->address, $this->sendPort ?? $this->port);
 	}
 
 	public function sendQueue(){
@@ -415,11 +428,11 @@ class Session{
 					$dataPacket->buffer = $packet->buffer;
 					$dataPacket->decode();
 
-					if($dataPacket->port === $this->sessionManager->getPort() or !$this->sessionManager->portChecking){
-						$this->state = self::STATE_CONNECTED; //FINALLY!
-						$this->isTemporal = false;
-						$this->sessionManager->openSession($this);
-					}
+					//端口校验已强制关闭: 客户端上报的是外网端口(frp remotePort),
+					//与服务端内网端口不一致属正常, 直接进入已连接状态
+					$this->state = self::STATE_CONNECTED; //FINALLY!
+					$this->isTemporal = false;
+					$this->sessionManager->openSession($this);
 				}
 			}elseif($id === CLIENT_DISCONNECT_DataPacket::$ID){
 				$this->disconnect("client disconnect");
@@ -517,16 +530,15 @@ class Session{
 				$this->state = self::STATE_CONNECTING_1;
 			}elseif($this->state === self::STATE_CONNECTING_1 and $packet instanceof OPEN_CONNECTION_REQUEST_2){
 				$this->id = $packet->clientID;
-				if($packet->serverPort === $this->sessionManager->getPort() or !$this->sessionManager->portChecking){
-					$this->mtuSize = min(abs($packet->mtuSize), 1464); //Max size, do not allow creating large buffers to fill server memory
-					$pk = new OPEN_CONNECTION_REPLY_2();
-					$pk->mtuSize = $this->mtuSize;
-					$pk->serverID = $this->sessionManager->getID();
-					$pk->clientAddress = $this->address;
-					$pk->clientPort = $this->port;
-					$this->sendPacket($pk);
-					$this->state = self::STATE_CONNECTING_2;
-				}
+				//端口校验已强制关闭: 客户端上报的是外网端口(frp remotePort), 与服务端内网端口不一致属正常
+				$this->mtuSize = min(abs($packet->mtuSize), 1464); //Max size, do not allow creating large buffers to fill server memory
+				$pk = new OPEN_CONNECTION_REPLY_2();
+				$pk->mtuSize = $this->mtuSize;
+				$pk->serverID = $this->sessionManager->getID();
+				$pk->clientAddress = $this->address;
+				$pk->clientPort = $this->port;
+				$this->sendPacket($pk);
+				$this->state = self::STATE_CONNECTING_2;
 			}
 		}
 	}

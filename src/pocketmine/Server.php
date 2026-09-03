@@ -120,6 +120,7 @@ use pocketmine\tile\Dropper;
 use pocketmine\tile\EnchantTable;
 use pocketmine\tile\FlowerPot;
 use pocketmine\tile\Furnace;
+use pocketmine\tile\Hopper;
 use pocketmine\tile\ItemFrame;
 use pocketmine\tile\MobSpawner;
 use pocketmine\tile\Sign;
@@ -164,6 +165,7 @@ use pocketmine\entity\SnowGolem;
 use pocketmine\entity\Lightning;
 use pocketmine\entity\XPOrb;
 use pocketmine\entity\ai\AIHolder;
+use pocketmine\frp\FrpManager;
 use pocketmine\entity\ThrownExpBottle;
 use pocketmine\entity\Boat;
 use pocketmine\entity\Minecart;
@@ -276,6 +278,9 @@ class Server{
 
 	/** @var Network */
 	private $network;
+
+	/** @var RakLibInterface|null frp 直接喂包需要引用的 RakNet 接口 */
+	private $rakLibInterface = null;
 
 	private $networkCompressionAsync = true;
 	public $networkCompressionLevel = 7;
@@ -393,6 +398,9 @@ class Server{
 
 	/** @var Synapse */
 	private $synapse = null;
+
+	/** @var \pocketmine\frp\FrpManager|null 内置 frp 隧道管理器 */
+	private $frpManager = null;
 
 	/**
 	 * @return string
@@ -762,6 +770,15 @@ class Server{
 
 	public function getAIHolder(){
 		return $this->aiHolder;
+	}
+
+	/**
+	 * 获取内置 frp 隧道管理器(不存在时为 null)
+	 *
+	 * @return \pocketmine\frp\FrpManager|null
+	 */
+	public function getFrpManager(){
+		return $this->frpManager;
 	}
 
 	/**
@@ -1983,7 +2000,12 @@ class Server{
 
 			$this->queryRegenerateTask = new QueryRegenerateEvent($this, 5);
 
-			$this->network->registerInterface(new RakLibInterface($this));
+			$this->frpManager = new FrpManager($this);
+			$this->frpManager->prepare();  //解析frp.toml/校验/修正localPort/确保frpc存在
+			$this->rakLibInterface = new RakLibInterface($this, $this->frpManager->isProxyProtocolEnabled(), $this->frpManager->isFrpFeedEnabled());
+			$this->network->registerInterface($this->rakLibInterface);
+			$this->frpManager->attachRakLib($this->rakLibInterface->getRakLibServer());
+			$this->frpManager->start();  //启动 frpc 隧道(端口已绑定)
 
 			$this->pluginManager->loadPlugins($this->pluginPath);
 
@@ -3022,6 +3044,11 @@ private function lookupAddress($address) {
 
 		$this->checkTickUpdates($this->tickCounter, $tickTime);
 
+		//frp: 进程内非阻塞客户端, 每 tick 驱动(20 TPS)以保证游戏 UDP 流量实时转发
+		if($this->frpManager !== null){
+			$this->frpManager->tick();
+		}
+
 		foreach($this->players as $player){
 			$player->checkNetwork();
 		}
@@ -3158,5 +3185,6 @@ private function lookupAddress($address) {
 		Tile::registerTile(Dropper::class);
 		Tile::registerTile(DLDetector::class);
 		Tile::registerTile(Cauldron::class);
+		Tile::registerTile(Hopper::class);
 	}
 }

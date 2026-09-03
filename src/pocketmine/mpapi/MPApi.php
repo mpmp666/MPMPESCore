@@ -62,6 +62,41 @@ final class MPApi{
 	}
 
 	/**
+	 * 获取玩家进入服务器时使用的端口。
+	 * 经内置 frp 隧道 + PROXY v2 还原后, 返回的是玩家的真实端口(外网端口);
+	 * 直连时返回客户端连接的端口。
+	 *
+	 * @param Player $player
+	 *
+	 * @return int
+	 */
+	public static function getPlayerPort(Player $player) : int{
+		return $player->getPort();
+	}
+
+	/**
+	 * 获取玩家进入服务器时使用的 IP(经 frp PROXY v2 还原后的真实 IP)。
+	 *
+	 * @param Player $player
+	 *
+	 * @return string
+	 */
+	public static function getPlayerAddress(Player $player) : string{
+		return $player->getAddress();
+	}
+
+	/**
+	 * 获取玩家进入时的完整地址 "IP:端口"(真实地址, frp PROXY 还原后)。
+	 *
+	 * @param Player $player
+	 *
+	 * @return string
+	 */
+	public static function getPlayerEntryAddress(Player $player) : string{
+		return $player->getAddress() . ":" . $player->getPort();
+	}
+
+	/**
 	 * AABB 内所有对实体有碰撞(hasEntityCollision)的方块,按 blockHash 索引。
 	 * 性能约为对 AABB 内逐点 getBlock() + 过滤的数倍。
 	 *
@@ -371,5 +406,66 @@ final class MPApi{
 			new \pocketmine\nbt\tag\StringTag('map_uuid', (string) $mapId),
 		]));
 		return $item;
+	}
+
+	/* ==================== frp 隧道相关 API ==================== */
+
+	/**
+	 * 是否已启用内置 frp 隧道(存在有效的 frp.toml / frp_*.toml 且已启动)。
+	 *
+	 * @return bool
+	 */
+	public static function isFrpEnabled() : bool{
+		$mgr = self::getFrpManager();
+		return $mgr !== null and count($mgr->getTunnels()) > 0;
+	}
+
+	/**
+	 * 获取 frp 隧道管理器(未初始化时为 null)
+	 *
+	 * @return \pocketmine\frp\FrpManager|null
+	 */
+	public static function getFrpManager(){
+		$server = \pocketmine\Server::getInstance();
+		return $server !== null ? $server->getFrpManager() : null;
+	}
+
+	/**
+	 * 获取所有 frp 隧道状态信息:
+	 * name / logFile / proxyProtocolVersion / pid(是否在运行)
+	 *
+	 * @return array<string, array{name:string,logFile:string,proxyProtocolVersion:string,pid:int|false}>
+	 */
+	public static function getFrpTunnels() : array{
+		$mgr = self::getFrpManager();
+		return $mgr !== null ? $mgr->getTunnels() : [];
+	}
+
+	/**
+	 * 重启所有 frp 隧道(frp 自动重试/手动修复)。
+	 *
+	 * @return bool 是否成功触发
+	 */
+	public static function restartFrp() : bool{
+		$mgr = self::getFrpManager();
+		if($mgr === null){
+			return false;
+		}
+		$mgr->restartAll();
+		return true;
+	}
+
+	/**
+	 * 停止全部 frp 隧道。
+	 *
+	 * @return bool
+	 */
+	public static function stopFrp() : bool{
+		$mgr = self::getFrpManager();
+		if($mgr === null){
+			return false;
+		}
+		$mgr->shutdown();
+		return true;
 	}
 }

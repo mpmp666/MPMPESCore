@@ -57,12 +57,12 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 	/** @var ServerHandler */
 	private $interface;
 
-	public function __construct(Server $server){
+	public function __construct(Server $server, $proxyProtocol = false, $frpFeed = false){
 
 		$this->server = $server;
 		$this->identifiers = [];
 
-		$this->rakLib = new RakLibServer($this->server->getLogger(), $this->server->getLoader(), $this->server->getPort(), $this->server->getIp() === "" ? "0.0.0.0" : $this->server->getIp());
+		$this->rakLib = new RakLibServer($this->server->getLogger(), $this->server->getLoader(), $this->server->getPort(), $this->server->getIp() === "" ? "0.0.0.0" : $this->server->getIp(), $proxyProtocol, $frpFeed);
 		// NOTE: RakLibServer's constructor already calls start() (registers with
 		// ThreadManager + runs onStart() which creates the UDP socket). Do NOT
 		// call start() again here or it double-registers.
@@ -71,6 +71,11 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 
 	public function setNetwork(Network $network){
 		$this->network = $network;
+	}
+
+	/** 供 FrpManager 获取底层 RakLibServer 以直接喂包/取回包 */
+	public function getRakLibServer(){
+		return $this->rakLib;
 	}
 
 	public function process(){

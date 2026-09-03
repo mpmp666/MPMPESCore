@@ -33,7 +33,17 @@ class RakLibServer extends \Thread{
     /** @var \Volatile */
     protected $internalQueue;
 
+	/** @var \Volatile frp 直接喂包队列 (主线程 frpc → RakLib 线程 SessionManager) */
+	public $frpInQueue;
+	/** @var \Volatile frp 回包队列表 (隧道名 => \Volatile 队列), 每条隧道独立, 消除多隧道回包路由歧义 */
+	public $frpOutQueues;
+
 	protected $mainPath;
+
+    /** @var bool PROXY protocol 真实 IP 还原开关 */
+    public $proxyProtocol = false;
+    /** @var bool frp 直接喂包开关 (frpc 经队列喂包, 不走本地 UDP socket) */
+    public $frpFeed = false;
 
 	/**
 	 * @param \ThreadedLogger $logger
@@ -43,13 +53,15 @@ class RakLibServer extends \Thread{
 	 *
 	 * @throws \Throwable
 	 */
-    public function __construct(\ThreadedLogger $logger, \ClassLoader $loader, $port, $interface = "0.0.0.0"){
+    public function __construct(\ThreadedLogger $logger, \ClassLoader $loader, $port, $interface = "0.0.0.0", $proxyProtocol = false, $frpFeed = false){
         $this->port = (int) $port;
         if($port < 1 or $port > 65536){
             throw new \Exception("Invalid port range");
         }
 
         $this->interface = $interface;
+        $this->proxyProtocol = $proxyProtocol;
+        $this->frpFeed = $frpFeed;
         $this->logger = $logger;
         $this->loader = $loader;
         $loadPaths = [];
@@ -63,6 +75,8 @@ class RakLibServer extends \Thread{
 
         $this->externalQueue = new \Volatile;
         $this->internalQueue = new \Volatile;
+        $this->frpInQueue = new \Volatile;
+        $this->frpOutQueues = new \Volatile;
 
 	    if(\Phar::running(true) !== ""){
 		    $this->mainPath = \Phar::running(true);
@@ -97,6 +111,13 @@ class RakLibServer extends \Thread{
 
             $socket = new UDPServerSocket($this->getLogger(), $this->port, $this->interface);
             $sessionManager = new SessionManager($this, $socket);
+            $sessionManager->proxyProtocol = $this->proxyProtocol;
+            $sessionManager->frpFeed = $this->frpFeed;
+            // 强制关闭 MCPE 0.14 RakNet 端口校验: 客户端上报的是它连接的外网端口
+            // (如 frp remotePort 40507), 而服务端 getPort() 是内网端口(如 19132),
+            // 内外不一致会导致 OPEN_CONNECTION_REQUEST_2 / CLIENT_HANDSHAKE 握手被拒
+            // (MOTD 能看到但进不去)。直接关闭校验, 无论是否使用 frp。
+            $sessionManager->portChecking = false;
 
             while(!$this->isShutdown()){
                 if($sessionManager !== null){
@@ -180,6 +201,45 @@ class RakLibServer extends \Thread{
 
     public function readThreadToMainPacket(){
         return $this->externalQueue->shift();
+    }
+
+    // ==================== frp 直接喂包队列 ====================
+    // 入站帧格式: "\x00" . chr(len(tunnel)) . tunnel . chr(len(ip)) . ip . writeShort(port) . data
+    //            (带隧道名, SessionManager 据此记录玩家归属隧道)
+    // 回包帧格式: "\x01" . chr(len(ip)) . ip . writeShort(port) . data
+    //            每条隧道一个独立队列 frpOutQueues[tunnel], 由对应 Frpc 实例独享
+
+    /** 确保某隧道存在回包队列 */
+    public function ensureFrpOutQueue($tunnel){
+        if(!isset($this->frpOutQueues[$tunnel])){
+            $this->frpOutQueues[$tunnel] = new \Volatile;
+        }
+    }
+
+    /** 主线程 frpc 调用: 推入一个从 frps 收到的 UDP 包 (真实地址 + 隧道名) */
+    public function pushFrpInbound($tunnel, $ip, $port, $data){
+        $this->frpInQueue[] = "\x00" . chr(strlen($tunnel)) . $tunnel . chr(strlen($ip)) . $ip . \raklib\Binary::writeShort($port) . $data;
+    }
+
+    /** RakLib 线程 SessionManager 调用: 取一个待喂入的包 */
+    public function readFrpInbound(){
+        return $this->frpInQueue->shift();
+    }
+
+    /** RakLib 线程 SessionManager 调用: 推一个回包到指定隧道队列 */
+    public function pushFrpOutbound($tunnel, $ip, $port, $data){
+        if(!isset($this->frpOutQueues[$tunnel])){
+            $this->frpOutQueues[$tunnel] = new \Volatile;
+        }
+        $this->frpOutQueues[$tunnel][] = "\x01" . chr(strlen($ip)) . $ip . \raklib\Binary::writeShort($port) . $data;
+    }
+
+    /** 主线程 frpc 调用: 取某隧道的一个 frp 回包 */
+    public function readFrpOutbound($tunnel){
+        if(!isset($this->frpOutQueues[$tunnel])){
+            return null;
+        }
+        return $this->frpOutQueues[$tunnel]->shift();
     }
 
 	public function shutdownHandler(){

@@ -20,6 +20,8 @@ PocketMine-MP-5.44.3/
 *.zip
 *.bak.*
 *.bak
+# frp 配置（含密钥/端口，本地差异化，不入库）
+*.toml
 server.properties
 pocketmine.yml
 genisys.yml

@@ -995,6 +995,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$this->getDisplayName()
 		])));
 
+		//MPApi/frp: 玩家进入时打印其进入端口(经 frp PROXY v2 还原后的真实端口)
+		$this->server->getLogger()->info("玩家 " . $this->getName() . " 进入游戏, IP=" . $this->getAddress() . " 端口=" . $this->getPort());
+
 		if(strlen(trim($msg = $ev->getJoinMessage())) > 0){
 			if($this->server->playerMsgType === Server:: PLAYER_MSG_TYPE_MESSAGE) $this->server->broadcastMessage($msg);
 			elseif($this->server->playerMsgType === Server::PLAYER_MSG_TYPE_TIP) $this->server->broadcastTip(str_replace("@player", $this->getName(), $this->server->playerLoginMsg));

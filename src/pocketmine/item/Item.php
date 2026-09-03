@@ -491,6 +491,8 @@ class Item{
 	const QUARTZ = 406;
 	const NETHER_QUARTZ = 406;
 
+	const HOPPER = 154;
+
 	const RAW_RABBIT = 411;
 	const COOKED_RABBIT = 412;
 	const RABBIT_STEW = 413;
@@ -672,6 +674,7 @@ class Item{
 			self::$list[self::BREWING_STAND] = BrewingStand::class;
 			self::$list[self::CAMERA] = Camera::class;
 			self::$list[self::BEETROOT] = Beetroot::class;
+			self::$list[self::HOPPER] = Hopper::class;
 			self::$list[self::FLOWER_POT] = FlowerPot::class;
 			self::$list[self::SKULL] = Skull::class;
 			self::$list[self::COOKED_RABBIT] = CookedRabbit::class;
@@ -1135,6 +1138,8 @@ class Item{
 			}
 			//MPApi: 地图物品进创造背包(空地图, 使用后记录周边地形)
 			self::addCreativeItem(Item::get(Item::MAP, 0));
+			//漏斗进创造背包
+			self::addCreativeItem(Item::get(Item::HOPPER, 0));
 		}else{
 			$creativeItems = new Config(Server::getInstance()->getFilePath() . "src/pocketmine/resources/creativeitems.json", Config::JSON, []);
 			foreach($creativeItems->getAll() as $item){

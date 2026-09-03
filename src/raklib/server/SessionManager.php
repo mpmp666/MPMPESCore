@@ -72,7 +72,17 @@ class SessionManager{
 	protected $block = [];
 	protected $ipSec = [];
 
-	public $portChecking = true;
+	/** @var bool 端口校验 (强制关闭: 内外网端口不一致时客户端握手会被拒, MOTD 能看到但进不去) */
+	public $portChecking = false;
+
+	/** @var bool 是否启用 frp 直接喂包 (frpc 走跨线程队列喂包, 不走本地 UDP socket/PROXY) */
+	public $frpFeed = false;
+
+	/** @var string[] 来自 frp 喂入的会话 (key = ip:port), 回包走 frp 队列而非本地 socket */
+	protected $frpSessions = [];
+
+	/** @var bool PROXY protocol(v2/v1)还原真实 IP, 由 frp.toml 配置驱动 */
+	public $proxyProtocol = false;
 
 	public function __construct(RakLibServer $server, UDPServerSocket $socket){
 		$this->server = $server;
@@ -104,8 +114,74 @@ class SessionManager{
 	public function tickOnce(){
 		$max = 5000;
 		while(--$max and $this->receivePacket()) ;
+		$this->drainFrpInbound();
 		while($this->receiveStream()) ;
 		$this->tick();
+	}
+
+	/**
+	 * 从跨线程队列读取 frpc 喂入的 UDP 数据包, 以真实地址直接送入会话处理。
+	 * 数据包裸 RakNet 字节, 无 PROXY 头(地址直接传进来)。
+	 */
+	private function drainFrpInbound(){
+		if(!$this->frpFeed){
+			return;
+		}
+		while(($frame = $this->server->readFrpInbound()) !== null and strlen($frame) > 0){
+			$offset = 0;
+			if($frame[$offset] !== "\x00"){
+				continue;
+			}
+			$offset++;
+			$tlen = ord($frame[$offset++]);
+			$tunnel = substr($frame, $offset, $tlen);
+			$offset += $tlen;
+			$len = ord($frame[$offset++]);
+			$ip = substr($frame, $offset, $len);
+			$offset += $len;
+			$port = Binary::readShort(substr($frame, $offset, 2));
+			$offset += 2;
+			$data = substr($frame, $offset);
+
+			if($data === "" or $data === "\0"){
+				continue;
+			}
+			$this->receiveBytes += strlen($data);
+			if(isset($this->block[$ip])){
+				continue;
+			}
+			if(isset($this->ipSec[$ip])){
+				$this->ipSec[$ip]++;
+			}else{
+				$this->ipSec[$ip] = 1;
+			}
+
+			$key = $ip . ":" . $port;
+			$this->frpSessions[$key] = $tunnel; //记录玩家归属隧道, 回包路由用
+
+			if(ord($data[0]) === UNCONNECTED_PING::$ID or ord($data[0]) === UNCONNECTED_PING_OPEN_CONNECTIONS::$ID){
+				$packet = new UNCONNECTED_PING_OPEN_CONNECTIONS();
+				if(ord($data[0]) === UNCONNECTED_PING::$ID){
+					$packet = new UNCONNECTED_PING();
+				}
+				$packet->buffer = $data;
+				$packet->decode();
+				$pk = new UNCONNECTED_PONG();
+				$pk->serverID = $this->getID();
+				$pk->pingID = $packet->pingID;
+				$pk->serverName = $this->getName();
+				$this->sendPacket($pk, $ip, $port);
+				continue;
+			}
+
+			$packet2 = $this->getPacketFromPool(ord($data[0]));
+			if($packet2 !== null){
+				$packet2->buffer = $data;
+				$this->getSession($ip, $port)->handlePacket($packet2);
+			}else{
+				$this->streamRaw($ip, $port, $data);
+			}
+		}
 	}
 
 	private function tickProcessor(){
@@ -146,6 +222,15 @@ class SessionManager{
 			$this->sendBytes = 0;
 			$this->receiveBytes = 0;
 
+			// 清理已无活跃会话的 frp 地址标记(防内存累积)
+			if(count($this->frpSessions) > 0){
+				foreach($this->frpSessions as $addr => $v){
+					if(!isset($this->sessions[$addr])){
+						unset($this->frpSessions[$addr]);
+					}
+				}
+			}
+
 			if(count($this->block) > 0){
 				asort($this->block);
 				$now = microtime(true);
@@ -166,6 +251,15 @@ class SessionManager{
 	private function receivePacket(){
 		if(($len = $this->socket->readPacket($buffer, $source, $port)) > 0){
 			$this->receiveBytes += $len;
+			//MPApi/frp: PROXY protocol 还原真实 IP。$source/$port 被替换为真实客户端地址,
+			//$transportSource/$transportPort 保留原始传输地址(回复必须走它才能经 frp 回到玩家)
+			$transportSource = null;
+			$transportPort = null;
+			if($this->proxyProtocol and $this->parseProxyProtocolHeader($buffer, $source, $port, $transportSource, $transportPort)){
+				if(isset($this->block[$source])){
+					return true;
+				}
+			}
 			if(isset($this->block[$source])){
 				return true;
 			}
@@ -184,7 +278,7 @@ class SessionManager{
 
 			if(($packet = $this->getPacketFromPool($pid)) !== null){
 				$packet->buffer = $buffer;
-				$this->getSession($source, $port)->handlePacket($packet);
+				$this->getSession($source, $port, $transportSource, $transportPort)->handlePacket($packet);
 				return true;
 			}elseif($pid === UNCONNECTED_PING::$ID){
 				//No need to create a session for just pings
@@ -196,7 +290,7 @@ class SessionManager{
 				$pk->serverID = $this->getID();
 				$pk->pingID = $packet->pingID;
 				$pk->serverName = $this->getName();
-				$this->sendPacket($pk, $source, $port);
+				$this->sendPacket($pk, $transportSource !== null ? $transportSource : $source, $transportPort !== null ? $transportPort : $port);
 			}elseif($buffer !== ""){
 				$this->streamRaw($source, $port, $buffer);
 				return true;
@@ -208,8 +302,77 @@ class SessionManager{
 		return false;
 	}
 
+	/**
+	 * frp/PROXY protocol v2 头解析(frps 经 frpc UDP 转发时, 每个玩家会话的首包带此头)。
+	 * 成功时: $buffer 去掉头, $source/$port 替换为真实客户端地址,
+	 * $transportSource/$transportPort 写入实际收到包的传输地址(用于回复路由)。
+	 *
+	 * @param string $buffer
+	 * @param string $source
+	 * @param int    $port
+	 * @param string $transportSource
+	 * @param int    $transportPort
+	 *
+	 * @return bool 是否为 PROXY 头且解析成功
+	 */
+	private function parseProxyProtocolHeader(&$buffer, &$source, &$port, &$transportSource, &$transportPort){
+		static $signature = "\r\n\r\n\x00\r\nQUIT\n";
+		if(strlen($buffer) < 16 + 12 or substr($buffer, 0, 12) !== $signature){
+			return false;
+		}
+		$verCmd = ord($buffer[12]);
+		if(($verCmd >> 4) !== 2){
+			return false;
+		}
+		if(($verCmd & 0x0F) !== 1){ //cmd 1 = PROXY (带地址); 0 = LOCAL, 无地址, 直接忽略剩余内容
+			return false;
+		}
+		$famProto = ord($buffer[13]);
+		$fam = $famProto >> 4;
+		$len = (ord($buffer[14]) << 8) | ord($buffer[15]);
+		$total = 16 + $len;
+		if(strlen($buffer) < $total){
+			return false;
+		}
+		$payload = substr($buffer, 16, $len);
+		if($fam === 1 and $len >= 12){ //AF_INET
+			$srcIp = ord($payload[0]) . '.' . ord($payload[1]) . '.' . ord($payload[2]) . '.' . ord($payload[3]);
+			$srcPort = (ord($payload[8]) << 8) | ord($payload[9]);
+		}elseif($fam === 2 and $len >= 36){ //AF_INET6
+			$srcIp = self::ipv6ToString(substr($payload, 0, 16));
+			$srcPort = (ord($payload[16]) << 8) | ord($payload[17]);
+		}else{
+			return false;
+		}
+		$transportSource = $source;
+		$transportPort = $port;
+		$source = $srcIp;
+		$port = $srcPort;
+		$buffer = substr($buffer, $total);
+		return true;
+	}
+
+	/**
+	 * @param string $raw 16 字节 IPv6 地址
+	 *
+	 * @return string
+	 */
+	private static function ipv6ToString($raw){
+		$groups = [];
+		for($i = 0; $i < 16; $i += 2){
+			$groups[] = sprintf('%x', (ord($raw[$i]) << 8) | ord($raw[$i + 1]));
+		}
+		return implode(':', $groups);
+	}
+
 	public function sendPacket(Packet $packet, $dest, $port){
 		$packet->encode();
+		// frp 返回路径: 若目标会话来自 frp 喂入, 回包走跨线程队列回对应隧道 frpc, 而非本地 UDP socket
+		if($this->frpFeed and isset($this->frpSessions[$dest . ":" . $port])){
+			$this->server->pushFrpOutbound($this->frpSessions[$dest . ":" . $port], $dest, $port, $packet->buffer);
+			$this->sendBytes += strlen($packet->buffer);
+			return;
+		}
 		$this->sendBytes += $this->socket->writePacket($packet->buffer, $dest, $port);
 	}
 
@@ -285,7 +448,12 @@ class SessionManager{
 				$port = Binary::readShort(substr($packet, $offset, 2));
 				$offset += 2;
 				$payload = substr($packet, $offset);
-				$this->socket->writePacket($payload, $address, $port);
+				if($this->frpFeed and isset($this->frpSessions[$address . ":" . $port])){
+					$this->server->pushFrpOutbound($this->frpSessions[$address . ":" . $port], $address, $port, $payload);
+					$this->sendBytes += strlen($payload);
+				}else{
+					$this->socket->writePacket($payload, $address, $port);
+				}
 			}elseif($id === RakLib::PACKET_CLOSE_SESSION){
 				$len = ord($packet[$offset++]);
 				$identifier = substr($packet, $offset, $len);
@@ -361,11 +529,22 @@ class SessionManager{
 	 *
 	 * @return Session
 	 */
-	public function getSession($ip, $port){
+	/**
+	 * @param string      $ip
+	 * @param int         $port
+	 * @param string|null $transportIp PROXY 协议场景下的实际回复地址
+	 * @param int|null    $transportPort
+	 *
+	 * @return Session
+	 */
+	public function getSession($ip, $port, $transportIp = null, $transportPort = null){
 		$id = $ip . ":" . $port;
 		if(!isset($this->sessions[$id])){
 			$this->checkSessions();
 			$this->sessions[$id] = new Session($this, $ip, $port);
+			if($transportIp !== null){
+				$this->sessions[$id]->setTransportAddress($transportIp, $transportPort);
+			}
 		}
 
 		return $this->sessions[$id];
@@ -376,6 +555,7 @@ class SessionManager{
 		if(isset($this->sessions[$id])){
 			$this->sessions[$id]->close();
 			unset($this->sessions[$id]);
+			unset($this->frpSessions[$id]);
 			$this->streamClose($id, $reason);
 		}
 	}

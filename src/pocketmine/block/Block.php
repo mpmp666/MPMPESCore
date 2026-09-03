@@ -260,6 +260,7 @@ class Block extends Position implements Metadatable{
 	const REDSTONE_BLOCK = 152;
 
 	const NETHER_QUARTZ_ORE = 153;
+	const HOPPER_BLOCK = 154;
 	const QUARTZ_BLOCK = 155;
 	const QUARTZ_STAIRS = 156;
 	const DOUBLE_WOOD_SLAB = 157;
@@ -520,6 +521,7 @@ class Block extends Position implements Metadatable{
 			self::$list[self::REDSTONE_BLOCK] = Redstone::class;
 
 			self::$list[self::QUARTZ_BLOCK] = Quartz::class;
+			self::$list[self::HOPPER_BLOCK] = Hopper::class;
 			self::$list[self::QUARTZ_STAIRS] = QuartzStairs::class;
 			self::$list[self::DOUBLE_WOOD_SLAB] = DoubleWoodSlab::class;
 			self::$list[self::WOOD_SLAB] = WoodSlab::class;
