@@ -19,6 +19,7 @@
 - **MiniMax M3**
 - **Nemotron 3 Ultra**
 - **GLM-5.3-Flash**
+- **MiMo V2.5 Free**
 
 ## ✨ 新增功能与改进
 
@@ -61,6 +62,7 @@
 - **Hopper（固定漏斗）**：
   - 新增 `findFirstItem()` 通用取物方法，**不依赖 `firstOccupied()`**，兼容所有 `BaseInventory` 子类（箱子、熔炉、发射器等）
   - 每 tick 仅吸 **1 个掉落物**，防止一 tick 吞掉整堆
+  - **已修复并排漏斗刷物 bug**：两个并排放置的漏斗同时拾取同一掉落物的问题，通过在拾取循环中增加 `isAlive` / `closed` 检查修复
   - 红石锁定：`isPowered` 为 true 时暂停传输
   - 8 tick 传输冷却，`transferCooldown` 纯 PHP 属性避免 NBT 序列化 NPE
 
@@ -68,6 +70,10 @@
   - 实体 ID 96，自动吸取上方容器/掉落物、向下方容器推送
   - 移动中同样工作，支持 NBT 持久化 `TransferCooldown`
   - 已注册实体网络 ID，客户端可正常显示
+
+#### 🐛 已知问题
+
+- **地图客户端崩溃**：玩家手持填充地图（Filled Map）时，客户端会崩溃。该问题在引入 FRP 直接喂包（frpc → RakNet）特性时出现，目前在局域网和 FRP 两种连接方式下均能复现。SCAXE 原版核心无此问题，已对比 RakNet 层代码但尚未定位到根因。
 
 ### 🎮 其他特性
 

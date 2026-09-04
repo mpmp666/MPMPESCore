@@ -122,6 +122,9 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 			if(!($entity instanceof DroppedItem)){
 				continue;
 			}
+			if(!$entity->isAlive() or $entity->closed){
+				continue;
+			}
 			if(!$entity->boundingBox->intersectsWith($area)){
 				continue;
 			}
