@@ -40,10 +40,15 @@ class CompressBatchedTask extends AsyncTask{
 
 	public function onRun(){
 		try{
-			$this->final = zlib_encode($this->data, ZLIB_ENCODING_DEFLATE, $this->level);
+			$this->final = @zlib_encode($this->data, ZLIB_ENCODING_DEFLATE, $this->level);
+			if($this->final === false){
+				// Retry with lower compression level to reduce memory pressure
+				$this->final = @zlib_encode($this->data, ZLIB_ENCODING_DEFLATE, 1);
+			}
 			$this->data = null;
 		}catch(\Throwable $e){
-
+			$this->final = null;
+			$this->data = null;
 		}
 	}
 

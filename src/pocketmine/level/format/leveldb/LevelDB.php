@@ -251,6 +251,9 @@ class LevelDB extends BaseLevelProvider{
 
 	private function writeChunk(Chunk $chunk){
 		$binary = $chunk->toBinary(true);
+		if($binary === false){
+			return;
+		}
 		$index = LevelDB::chunkIndex($chunk->getX(), $chunk->getZ());
 		$this->db->put($index . self::ENTRY_TERRAIN, substr($binary, 8, -1));
 		$this->db->put($index . self::ENTRY_FLAGS, substr($binary, -1));

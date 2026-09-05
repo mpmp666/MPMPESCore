@@ -74,6 +74,9 @@ class NBT{
 	public $endianness;
 	private $data;
 
+	/** @var string[]|null Write-mode buffer chunks (avoids repeated string reallocation) */
+	private $bufferChunks;
+
 
 	/**
 	 * @param Item $item
@@ -444,7 +447,11 @@ class NBT{
 	}
 
 	public function put($v){
-		$this->buffer .= $v;
+		if($this->bufferChunks !== null){
+			$this->bufferChunks[] = $v;
+		}else{
+			$this->buffer .= $v;
+		}
 	}
 
 	public function feof(){
@@ -478,25 +485,38 @@ class NBT{
 	 */
 	public function write(){
 		$this->offset = 0;
+		$this->bufferChunks = [];
 		$this->buffer = "";
 
 		if($this->data instanceof CompoundTag){
 			$this->writeTag($this->data);
 
+			$this->buffer = implode("", $this->bufferChunks);
+			$this->bufferChunks = null;
 			return $this->buffer;
 		}elseif(is_array($this->data)){
 			foreach($this->data as $tag){
 				$this->writeTag($tag);
 			}
+			$this->buffer = implode("", $this->bufferChunks);
+			$this->bufferChunks = null;
 			return $this->buffer;
 		}
 
+		$this->bufferChunks = null;
 		return false;
 	}
 
 	public function writeCompressed($compression = ZLIB_ENCODING_GZIP, $level = 7){
 		if(($write = $this->write()) !== false){
-			return zlib_encode($write, $compression, $level);
+			$result = @zlib_encode($write, $compression, $level);
+			if($result === false){
+				// Fallback: try with lower compression level to reduce memory pressure
+				$result = @zlib_encode($write, $compression, max(1, $level - 3));
+			}
+			// Free the uncompressed data as soon as possible
+			unset($write);
+			return $result;
 		}
 
 		return false;
@@ -570,7 +590,7 @@ class NBT{
 	}
 
 	public function putByte($v){
-		$this->buffer .= Binary::writeByte($v);
+		$this->put(Binary::writeByte($v));
 	}
 
 	public function getShort(){
@@ -578,7 +598,7 @@ class NBT{
 	}
 
 	public function putShort($v){
-		$this->buffer .= $this->endianness === self::BIG_ENDIAN ? Binary::writeShort($v) : Binary::writeLShort($v);
+		$this->put($this->endianness === self::BIG_ENDIAN ? Binary::writeShort($v) : Binary::writeLShort($v));
 	}
 
 	public function getInt(){
@@ -586,7 +606,7 @@ class NBT{
 	}
 
 	public function putInt($v){
-		$this->buffer .= $this->endianness === self::BIG_ENDIAN ? Binary::writeInt($v) : Binary::writeLInt($v);
+		$this->put($this->endianness === self::BIG_ENDIAN ? Binary::writeInt($v) : Binary::writeLInt($v));
 	}
 
 	public function getLong(){
@@ -594,7 +614,7 @@ class NBT{
 	}
 
 	public function putLong($v){
-		$this->buffer .= $this->endianness === self::BIG_ENDIAN ? Binary::writeLong($v) : Binary::writeLLong($v);
+		$this->put($this->endianness === self::BIG_ENDIAN ? Binary::writeLong($v) : Binary::writeLLong($v));
 	}
 
 	public function getFloat(){
@@ -602,7 +622,7 @@ class NBT{
 	}
 
 	public function putFloat($v){
-		$this->buffer .= $this->endianness === self::BIG_ENDIAN ? Binary::writeFloat($v) : Binary::writeLFloat($v);
+		$this->put($this->endianness === self::BIG_ENDIAN ? Binary::writeFloat($v) : Binary::writeLFloat($v));
 	}
 
 	public function getDouble(){
@@ -610,7 +630,7 @@ class NBT{
 	}
 
 	public function putDouble($v){
-		$this->buffer .= $this->endianness === self::BIG_ENDIAN ? Binary::writeDouble($v) : Binary::writeLDouble($v);
+		$this->put($this->endianness === self::BIG_ENDIAN ? Binary::writeDouble($v) : Binary::writeLDouble($v));
 	}
 
 	public function getString(){
@@ -619,7 +639,7 @@ class NBT{
 
 	public function putString($v){
 		$this->putShort(strlen($v));
-		$this->buffer .= $v;
+		$this->put($v);
 	}
 
 	public function getArray(){

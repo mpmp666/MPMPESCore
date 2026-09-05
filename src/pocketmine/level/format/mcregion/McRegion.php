@@ -105,7 +105,9 @@ class McRegion extends BaseLevelProvider{
 			"Data" => $levelData
 		]));
 		$buffer = $nbt->writeCompressed();
-		file_put_contents($path . "level.dat", $buffer);
+		if($buffer !== false){
+			file_put_contents($path . "level.dat", $buffer);
+		}
 	}
 
 	public static function getRegionIndex($chunkX, $chunkZ, &$x, &$z){

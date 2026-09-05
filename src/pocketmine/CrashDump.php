@@ -57,9 +57,14 @@ class CrashDump{
 		$this->addLine("----------------------REPORT THE DATA BELOW THIS LINE-----------------------");
 		$this->addLine();
 		$this->addLine("===BEGIN CRASH DUMP===");
-		$this->encodedData = zlib_encode(json_encode($this->data, JSON_UNESCAPED_SLASHES), ZLIB_ENCODING_DEFLATE, 9);
-		foreach(str_split(base64_encode($this->encodedData), 76) as $line){
-			$this->addLine($line);
+		$this->encodedData = @zlib_encode(json_encode($this->data, JSON_UNESCAPED_SLASHES), ZLIB_ENCODING_DEFLATE, 9);
+		if($this->encodedData === false){
+			$this->encodedData = @zlib_encode(json_encode($this->data, JSON_UNESCAPED_SLASHES), ZLIB_ENCODING_DEFLATE, 1);
+		}
+		if($this->encodedData !== false){
+			foreach(str_split(base64_encode($this->encodedData), 76) as $line){
+				$this->addLine($line);
+			}
 		}
 		$this->addLine("===END CRASH DUMP===");
 	}

@@ -28,29 +28,29 @@ settings:
 memory:
  #Global soft memory limit in megabytes. Set to 0 to disable
  #This will trigger low-memory-triggers and fire an event to free memory when the usage goes over this
- global-limit: 0
+ global-limit: 512
 
  #Main thread soft memory limit in megabytes. Set to 0 to disable
  #This will trigger low-memory-triggers and fire an event to free memory when the usage goes over this
- main-limit: 0
+ main-limit: 512
 
  #Main thread hard memory limit in megabytes. Set to 0 to disable
  #This will stop the server when the limit is surpassed
  main-hard-limit: 1024
 
  #Period in ticks to check memory (default 1 second)
- check-rate: 20
+ check-rate: 10
 
  #Continue firing low-memory-triggers and event while on low memory
  continuous-trigger: true
 
  #Only if memory.continuous-trigger is enabled. Specifies the rate in memory.check-rate steps (default 30 seconds)
- continuous-trigger-rate: 30
+ continuous-trigger-rate: 15
 
  garbage-collection:
   #Period in ticks to fire the garbage collector manually (default 30 minutes), set to 0 to disable
   #This only affect the main thread. Other threads should fire their own collections
-  period: 36000
+  period: 18000
 
   #Fire asynchronous tasks to collect garbage from workers
   collect-async-worker: true

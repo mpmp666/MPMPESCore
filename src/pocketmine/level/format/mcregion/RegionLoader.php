@@ -200,7 +200,11 @@ class RegionLoader{
 				continue;
 			}
 
-			$chunk = chr(self::COMPRESSION_ZLIB) . zlib_encode($chunk, ZLIB_ENCODING_DEFLATE, 9);
+			$compressed = @zlib_encode($chunk, ZLIB_ENCODING_DEFLATE, 9);
+			if($compressed === false){
+				$compressed = @zlib_encode($chunk, ZLIB_ENCODING_DEFLATE, 1);
+			}
+			$chunk = chr(self::COMPRESSION_ZLIB) . $compressed;
 			$chunk = Binary::writeInt(strlen($chunk)) . $chunk;
 			$sectors = (int) ceil(strlen($chunk) / 4096);
 			if($sectors > $this->locationTable[$i][1]){

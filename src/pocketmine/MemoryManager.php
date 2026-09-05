@@ -62,6 +62,12 @@ class MemoryManager{
 
 	private $leakSeed = 0;
 
+	/** @var float Critical memory usage ratio (0.0-1.0) — when exceeded, force full GC + chunk unload */
+	private $criticalThreshold = 0.85;
+
+	/** @var int Timestamp of last critical memory action */
+	private $lastCriticalAction = 0;
+
 	public function __construct(Server $server){
 		$this->server = $server;
 
@@ -186,6 +192,26 @@ class MemoryManager{
 				}
 			}else{
 				$this->lowMemory = false;
+			}
+
+			// Critical memory threshold: when usage exceeds ratio of hard limit, force aggressive cleanup
+			$hardLimit = ((int) $this->server->getProperty("memory.main-hard-limit", 1024)) * 1024 * 1024;
+			if($hardLimit > 0 && $memory[0] > $hardLimit * $this->criticalThreshold){
+				$now = time();
+				// Throttle critical actions to once per 10 seconds
+				if($now - $this->lastCriticalAction >= 10){
+					$this->lastCriticalAction = $now;
+					$this->server->getLogger()->warning("[Memory Manager] CRITICAL: Memory usage at " . round(($memory[0] / 1024) / 1024, 2) . "MB / " . round(($hardLimit / 1024) / 1024, 0) . "MB — forcing aggressive cleanup");
+
+					// Force full chunk garbage collection on all levels
+					foreach($this->server->getLevels() as $level){
+						$level->clearCache(true);
+						$level->doChunkGarbageCollection();
+					}
+
+					// Force PHP garbage collection
+					gc_collect_cycles();
+				}
 			}
 		}
 

@@ -4748,7 +4748,11 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		if(Network::$BATCH_THRESHOLD >= 0){
 			$pk->encode();
 			$batch = new BatchPacket();
-			$batch->payload = zlib_encode(Binary::writeInt(strlen($pk->getBuffer())) . $pk->getBuffer(), ZLIB_ENCODING_DEFLATE, Server::getInstance()->networkCompressionLevel);
+			$compressed = @zlib_encode(Binary::writeInt(strlen($pk->getBuffer())) . $pk->getBuffer(), ZLIB_ENCODING_DEFLATE, Server::getInstance()->networkCompressionLevel);
+			if($compressed === false){
+				$compressed = @zlib_encode(Binary::writeInt(strlen($pk->getBuffer())) . $pk->getBuffer(), ZLIB_ENCODING_DEFLATE, 1);
+			}
+			$batch->payload = $compressed;
 			$batch->encode();
 			$batch->isEncoded = true;
 			return $batch;

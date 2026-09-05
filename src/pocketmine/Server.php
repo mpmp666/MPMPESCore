@@ -1032,11 +1032,16 @@ class Server{
 		$nbt = new NBT(NBT::BIG_ENDIAN);
 		try{
 			$nbt->setData($nbtTag);
+			$compressed = $nbt->writeCompressed();
+			if($compressed === false){
+				$this->logger->critical("Failed to compress player data for " . $name . " — memory may be exhausted");
+				return;
+			}
 
 			if($async){
-				$this->getScheduler()->scheduleAsyncTask(new FileWriteTask($this->getDataPath() . "players/" . strtolower($name) . ".dat", $nbt->writeCompressed()));
+				$this->getScheduler()->scheduleAsyncTask(new FileWriteTask($this->getDataPath() . "players/" . strtolower($name) . ".dat", $compressed));
 			}else{
-				file_put_contents($this->getDataPath() . "players/" . strtolower($name) . ".dat", $nbt->writeCompressed());
+				file_put_contents($this->getDataPath() . "players/" . strtolower($name) . ".dat", $compressed);
 			}
 		}catch(\Throwable $e){
 			$this->logger->critical($this->getLanguage()->translateString("pocketmine.data.saveError", [$name, $e->getMessage()]));
@@ -2336,7 +2341,11 @@ private function lookupAddress($address) {
 			$task = new CompressBatchedTask($str, $targets, $this->networkCompressionLevel);
 			$this->getScheduler()->scheduleAsyncTask($task);
 		}else{
-			$this->broadcastPacketsCallback(zlib_encode($str, ZLIB_ENCODING_DEFLATE, $this->networkCompressionLevel), $targets);
+			$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, $this->networkCompressionLevel);
+			if($compressed === false){
+				$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, 1);
+			}
+			$this->broadcastPacketsCallback($compressed, $targets);
 		}
 
 		Timings::$playerNetworkTimer->stopTiming();
