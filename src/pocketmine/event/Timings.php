@@ -201,7 +201,10 @@ abstract class Timings{
 	 * @return TimingsHandler
 	 */
 	public static function getEntityTimings(Entity $entity){
-		$entityType = (new \ReflectionClass($entity))->getShortName();
+		//short class name without allocating a ReflectionClass per entity spawn
+		$class = get_class($entity);
+		$pos = strrpos($class, "\\");
+		$entityType = $pos === false ? $class : substr($class, $pos + 1);
 		if(!isset(self::$entityTypeTimingMap[$entityType])){
 			if($entity instanceof Player){
 				self::$entityTypeTimingMap[$entityType] = new TimingsHandler("** tickEntity - EntityPlayer", self::$tickEntityTimer);
@@ -219,7 +222,9 @@ abstract class Timings{
 	 * @return TimingsHandler
 	 */
 	public static function getTileEntityTimings(Tile $tile){
-		$tileType = (new \ReflectionClass($tile))->getShortName();
+		$class = get_class($tile);
+		$pos = strrpos($class, "\\");
+		$tileType = $pos === false ? $class : substr($class, $pos + 1);
 		if(!isset(self::$tileEntityTypeTimingMap[$tileType])){
 			self::$tileEntityTypeTimingMap[$tileType] = new TimingsHandler("** tickTileEntity - " . $tileType, self::$tickTileEntityTimer);
 		}

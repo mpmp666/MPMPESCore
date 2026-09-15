@@ -92,6 +92,10 @@ server:
  allow-splash-potion: true
  #Bật/tắt nếu muốn thêm Lệnh Nâng Cao (mặc định: false) (true/false)
  advanced-command-selector: false
+ #Chống tấn công tài khoản ảo (bot): khi tài khoản thứ N từ một IP vào game, toàn bộ tài khoản của IP đó bị kick và IP bị cấm tạm thởi. 0 = không giới hạn
+ max-accounts-per-ip: 3
+ #Thời gian cấm tạm (giây) khi bị phát hiện
+ accounts-per-ip-ban-time: 300
 
 redstone:
  ##########################################

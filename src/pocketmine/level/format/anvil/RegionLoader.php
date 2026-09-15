@@ -34,8 +34,8 @@ class RegionLoader extends \pocketmine\level\format\mcregion\RegionLoader{
 		$exists = file_exists($this->filePath);
 		touch($this->filePath);
 		$this->filePointer = fopen($this->filePath, "r+b");
-		stream_set_read_buffer($this->filePointer, 1024 * 16); //16KB
-		stream_set_write_buffer($this->filePointer, 1024 * 16); //16KB
+		stream_set_read_buffer($this->filePointer, 262144); //256KB: fewer syscalls on sequential chunk reads
+		stream_set_write_buffer($this->filePointer, 262144); //256KB: batch autosave chunk writes into fewer flushes
 		if(!$exists){
 			$this->createBlank();
 		}else{

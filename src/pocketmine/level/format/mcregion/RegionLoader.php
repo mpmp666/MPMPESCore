@@ -57,8 +57,8 @@ class RegionLoader{
 			touch($this->filePath);
 		}
 		$this->filePointer = fopen($this->filePath, "r+b");
-		stream_set_read_buffer($this->filePointer, 1024 * 16); //16KB
-		stream_set_write_buffer($this->filePointer, 1024 * 16); //16KB
+		stream_set_read_buffer($this->filePointer, 262144); //256KB: fewer syscalls on sequential chunk reads
+		stream_set_write_buffer($this->filePointer, 262144); //256KB: batch autosave chunk writes into fewer flushes
 		if(!$exists){
 			$this->createBlank();
 		}else{
@@ -150,7 +150,25 @@ class RegionLoader{
 		$this->locationTable[$index][2] = time();
 
 		fseek($this->filePointer, $this->locationTable[$index][0] << 12);
-		fwrite($this->filePointer, str_pad(Binary::writeInt($length) . chr(self::COMPRESSION_ZLIB) . $chunkData, $sectors << 12, "\x00", STR_PAD_RIGHT));
+		$write = Binary::writeInt($length) . chr(self::COMPRESSION_ZLIB) . $chunkData;
+		fwrite($this->filePointer, $write);
+		//Pad to the sector boundary with a shared zero block instead of
+		//str_pad()ing the whole payload (avoids one full-size string copy
+		//per chunk save; identical bytes on disk).
+		$pad = ($sectors << 12) - strlen($write);
+		if($pad > 0){
+			static $zeroPad = null;
+			if($zeroPad === null){
+				$zeroPad = str_repeat("\x00", 4096);
+			}
+			while($pad >= 4096){
+				fwrite($this->filePointer, $zeroPad, 4096);
+				$pad -= 4096;
+			}
+			if($pad > 0){
+				fwrite($this->filePointer, $zeroPad, $pad);
+			}
+		}
 
 		if($indexChanged){
 			$this->writeLocationIndex($index);

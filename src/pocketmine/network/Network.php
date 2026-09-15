@@ -235,11 +235,25 @@ class Network {
 
 	public function processBatch(BatchPacket $packet, Player $p) {
 		$str = zlib_decode($packet->payload, 1024 * 1024 * 64); //Max 64MB
+		if($str === false){
+			return; //corrupt zlib stream, just drop it
+		}
 		$len = strlen($str);
 		$offset = 0;
 		try {
 			while ($offset < $len) {
+				//The inner packet length is attacker-controlled data. Without
+				//validation, a crafted value (e.g. -4) makes $offset stand still
+				//or move backwards: the main thread loops forever (DoS).
+				if($len - $offset < 5){ //4-byte length + at least 1 byte of packet data
+					$this->flagMalformedBatch($p, "trailing " . ($len - $offset) . " byte(s)");
+					return;
+				}
 				$pkLen = Binary::readInt(substr($str, $offset, 4));
+				if($pkLen < 2 or $pkLen > $len - $offset - 4){ //min: 0x8e + packet id; max: remaining bytes
+					$this->flagMalformedBatch($p, "invalid inner packet length $pkLen");
+					return;
+				}
 				$offset += 4;
 
 				$buf = substr($str, $offset, $pkLen);
@@ -269,6 +283,22 @@ class Network {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Kicks the player and temporarily blocks their IP for sending a crafted
+	 * BatchPacket (negative / out-of-bounds inner packet length — a packet that
+	 * would otherwise loop the server thread forever). A legitimate client can
+	 * never produce such a packet, so first strike = temp ban, no false positives.
+	 *
+	 * @param Player $p
+	 * @param string $reason
+	 */
+	private function flagMalformedBatch(Player $p, $reason){
+		$address = $p->getAddress();
+		$this->server->getLogger()->warning("[Security] Blocked $address for 300 seconds (malformed batch packet: $reason)");
+		$this->blockAddress($address, 300);
+		$p->close($p->getLeaveMessage(), "Malformed batch packet");
 	}
 
 	/**

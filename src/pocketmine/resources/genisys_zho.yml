@@ -91,6 +91,10 @@ server:
  allow-splash-potion: true
  #是否啟用進階指令選擇器
  advanced-command-selector: false
+ #假人攻擊攔截: 同一IP進入第N個賬號時, 該IP全部賬號被踢出並臨時封禁, 0為不限制
+ max-accounts-per-ip: 3
+ #觸發假人攔截後的臨時封禁時長(秒)
+ accounts-per-ip-ban-time: 300
 
 redstone:
  ##############################

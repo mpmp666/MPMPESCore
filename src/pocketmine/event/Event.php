@@ -87,4 +87,16 @@ abstract class Event{
 		return static::$handlerList;
 	}
 
+	/**
+	 * Returns true when at least one listener is registered for this event class.
+	 * Hot code paths use this to skip constructing the event object when no plugin
+	 * can observe it. Resolves through the same static::$handlerList as
+	 * getHandlers(), so it is always consistent with what callEvent() would do.
+	 *
+	 * @return bool
+	 */
+	public static function hasHandlers(){
+		return static::$handlerList !== null and count(static::$handlerList->getRegisteredListeners()) > 0;
+	}
+
 }

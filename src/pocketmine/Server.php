@@ -393,6 +393,12 @@ class Server{
 	public $advancedCommandSelector = false;
 	public $synapseConfig = [];
 
+	/** @var int 同一 IP 允许的最大同时在线账号数(假人攻击拦截), 0 = 不限制 */
+	public $maxAccountsPerIp = 3;
+
+	/** @var int 触发假人拦截后的临时封禁秒数 */
+	public $accountsPerIpBanTime = 300;
+
 	/** @var CraftingDataPacket */
 	private $recipeList = null;
 
@@ -1711,6 +1717,8 @@ class Server{
 		$this->allowSplashPotion = $this->getAdvancedProperty("server.allow-splash-potion", true);
 		$this->fireSpread = $this->getAdvancedProperty("level.fire-spread", false);
 		$this->advancedCommandSelector = $this->getAdvancedProperty("server.advanced-command-selector", false);
+		$this->maxAccountsPerIp = (int) $this->getAdvancedProperty("server.max-accounts-per-ip", 3);
+		$this->accountsPerIpBanTime = (int) $this->getAdvancedProperty("server.accounts-per-ip-ban-time", 300);
 		$this->synapseConfig = [
 			"enabled" => $this->getAdvancedProperty("synapse.enabled", false),
 			"server-ip" => $this->getAdvancedProperty("synapse.server-ip", "127.0.0.1"),

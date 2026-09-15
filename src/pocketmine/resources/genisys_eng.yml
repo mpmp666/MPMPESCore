@@ -92,6 +92,10 @@ server:
  allow-splash-potion: true
  #Set if enable advanced Command Selector
  advanced-command-selector: false
+ #Anti fake-player(bot) attack: when the Nth account from one IP joins, all accounts of that IP get kicked and the IP is temp-banned. 0 = unlimited
+ max-accounts-per-ip: 3
+ #Temp-ban duration in seconds when the anti-bot limit is triggered
+ accounts-per-ip-ban-time: 300
 
 redstone:
  ##########################################

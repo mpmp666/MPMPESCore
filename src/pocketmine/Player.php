@@ -1125,10 +1125,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 		$timings = Timings::getSendDataPacketTimings($packet);
 		$timings->startTiming();
-		$this->server->getPluginManager()->callEvent($ev = new DataPacketSendEvent($this, $packet));
-		if($ev->isCancelled()){
-			$timings->stopTiming();
-			return false;
+		if(DataPacketSendEvent::hasHandlers()){ //skip event allocation when no plugin listens
+			$this->server->getPluginManager()->callEvent($ev = new DataPacketSendEvent($this, $packet));
+			if($ev->isCancelled()){
+				$timings->stopTiming();
+				return false;
+			}
 		}
 
 		if(!isset($this->batchedPackets)){
@@ -1156,10 +1158,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$timings = Timings::getSendDataPacketTimings($packet);
 		$timings->startTiming();
 
-		$this->server->getPluginManager()->callEvent($ev = new DataPacketSendEvent($this, $packet));
-		if($ev->isCancelled()){
-			$timings->stopTiming();
-			return false;
+		if(DataPacketSendEvent::hasHandlers()){ //skip event allocation when no plugin listens
+			$this->server->getPluginManager()->callEvent($ev = new DataPacketSendEvent($this, $packet));
+			if($ev->isCancelled()){
+				$timings->stopTiming();
+				return false;
+			}
 		}
 
 		$identifier = $this->interface->putPacket($this, $packet, $needACK, false);
@@ -1188,10 +1192,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 		$timings = Timings::getSendDataPacketTimings($packet);
 		$timings->startTiming();
-		$this->server->getPluginManager()->callEvent($ev = new DataPacketSendEvent($this, $packet));
-		if($ev->isCancelled()){
-			$timings->stopTiming();
-			return false;
+		if(DataPacketSendEvent::hasHandlers()){ //skip event allocation when no plugin listens
+			$this->server->getPluginManager()->callEvent($ev = new DataPacketSendEvent($this, $packet));
+			if($ev->isCancelled()){
+				$timings->stopTiming();
+				return false;
+			}
 		}
 
 		$identifier = $this->interface->putPacket($this, $packet, $needACK, true);
@@ -1709,12 +1715,16 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$this->lastPitch = $to->pitch;
 
 			if(!$isFirst){
-				$ev = new PlayerMoveEvent($this, $from, $to);
 				$this->setMoving(true);
 
-				$this->server->getPluginManager()->callEvent($ev);
+				$ev = null;
+				if(PlayerMoveEvent::hasHandlers()){ //skip event allocation when no plugin listens
+					$ev = new PlayerMoveEvent($this, $from, $to);
+					$this->server->getPluginManager()->callEvent($ev);
+					$revert = $ev->isCancelled();
+				}
 
-				if(!($revert = $ev->isCancelled())){ //Yes, this is intended
+				if(!$revert){ //Yes, this is intended
 					//$teleported = false;
 					if($this->server->netherEnabled){
 						if($this->isInsideOfPortal()){
@@ -1729,7 +1739,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					//if($this->server->redstoneEnabled) $this->getLevel()->updateAround($ev->getTo()->round());
 
 					//	if(!$teleported){
-					if($to->distanceSquared($ev->getTo()) > 0.01){ //If plugins modify the destination
+					if($ev !== null and $to->distanceSquared($ev->getTo()) > 0.01){ //If plugins modify the destination
 						$this->teleport($ev->getTo());
 					}else{
 						$this->level->addEntityMovement($this->x >> 4, $this->z >> 4, $this->getId(), $this->x, $this->y + $this->getEyeHeight(), $this->z, $this->yaw, $this->pitch, $this->yaw);
@@ -2308,6 +2318,28 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			return;
 		}
 
+		//假人攻击拦截: 同一 IP 进入第 N 个账号(默认第 3 个, genisys.yml
+		//server.max-accounts-per-ip 可调, 0 关闭)时, 踢掉该 IP 全部已在线账号,
+		//并将该 IP 临时封禁(RakLib 层直接丢包, server.accounts-per-ip-ban-time 秒)
+		if($this->server->maxAccountsPerIp > 0){
+			$myIp = $this->getAddress();
+			$sameIp = [];
+			foreach($this->server->getOnlinePlayers() as $p){
+				if($p !== $this and $p->getAddress() === $myIp){
+					$sameIp[] = $p;
+				}
+			}
+			if(count($sameIp) + 1 >= $this->server->maxAccountsPerIp){
+				$this->server->getLogger()->warning("[AntiBot] IP $myIp 进入第 " . (count($sameIp) + 1) . " 个账号(" . $this->getName() . "), 已踢出该 IP 全部账号并临时封禁 " . $this->server->accountsPerIpBanTime . " 秒");
+				foreach($sameIp as $p){
+					$p->close($p->getLeaveMessage(), "同一IP账号数量超限, IP已被临时封禁");
+				}
+				$this->server->getNetwork()->blockAddress($myIp, $this->server->accountsPerIpBanTime);
+				$this->close($this->getLeaveMessage(), "同一IP账号数量超限, IP已被临时封禁");
+				return;
+			}
+		}
+
 		if($this->hasPermission(Server::BROADCAST_CHANNEL_USERS)){
 			$this->server->getPluginManager()->subscribeToPermission(Server::BROADCAST_CHANNEL_USERS, $this);
 		}
@@ -2500,10 +2532,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 		$timings->startTiming();
 
-		$this->server->getPluginManager()->callEvent($ev = new DataPacketReceiveEvent($this, $packet));
-		if($ev->isCancelled()){
-			$timings->stopTiming();
-			return;
+		if(DataPacketReceiveEvent::hasHandlers()){ //skip event allocation when no plugin listens
+			$this->server->getPluginManager()->callEvent($ev = new DataPacketReceiveEvent($this, $packet));
+			if($ev->isCancelled()){
+				$timings->stopTiming();
+				return;
+			}
 		}
 
 		switch($packet::NETWORK_ID){

@@ -218,13 +218,17 @@ class MainLogger extends \AttachableThreadedLogger{
 			}
 		}
 
-		$message = TextFormat::toANSI(TextFormat::AQUA . "[" . date("H:i:s", $now) . "] " . TextFormat::RESET . $color . "[" . $threadName . "/" . $prefix . "]:" . " " . $message . TextFormat::RESET);
-		//$message = TextFormat::toANSI(TextFormat::AQUA . "[" . date("H:i:s") . "] ". TextFormat::RESET . $color ."<".$prefix . ">" . " " . $message . TextFormat::RESET);
-		$cleanMessage = TextFormat::clean($message);
+		//Perf: build the plain-text line from the RAW message (single clean() pass),
+		//and only run toANSI() when the terminal actually renders colors.
+		//Old code always ran toANSI() AND clean()ed the longer ANSI-expanded string.
+		$time = date("H:i:s", $now);
+		$cleanMessage = "[" . $time . "] [" . $threadName . "/" . $prefix . "]: " . TextFormat::clean((string) $message);
 
-		if(!Terminal::hasFormattingCodes()){
-			echo $cleanMessage . PHP_EOL;
+		if(Terminal::hasFormattingCodes()){
+			$message = TextFormat::toANSI(TextFormat::AQUA . "[" . $time . "] " . TextFormat::RESET . $color . "[" . $threadName . "/" . $prefix . "]:" . " " . $message . TextFormat::RESET);
+			echo $message . PHP_EOL;
 		}else{
+			$message = $cleanMessage;
 			echo $message . PHP_EOL;
 		}
 
@@ -278,17 +282,66 @@ class MainLogger extends \AttachableThreadedLogger{
 		}
 	}*/
 
-	/** Real thread body (pmmp\thread\Thread::run -> onRun). Drains logStream to disk. */
+	/** Real thread body (pmmp\thread\Thread::run -> onRun). Drains logStream to disk.
+	 *
+	 * Perf: keeps the log file open for the whole thread lifetime and writes
+	 * through a 64KB stdio buffer instead of doing open()+write()+close()
+	 * (file_put_contents with FILE_APPEND) for every single log line.
+	 * The queue is always drained, even when writing is disabled, so the
+	 * shared logStream can never grow without bound (memory leak fix).
+	 */
 	public function onRun(){
-		while(!$this->isTerminated()){
-			if($this->write and $this->logStream->count() > 0){
-				while($this->logStream->count() > 0){
-					$chunk = $this->logStream->shift();
-					@file_put_contents($this->logFile, $chunk, FILE_APPEND);
-				}
+		$this->logResource = null;
+		$buf = "";
+		$flushCounter = 0;
+
+		while(!$this->isTerminated() and !$this->shutdown){
+			while($this->logStream->count() > 0){
+				$buf .= $this->logStream->shift();
 			}
+
+			if($this->write){
+				if($this->logResource === null){
+					$res = @fopen($this->logFile, "ab");
+					if(is_resource($res)){
+						stream_set_write_buffer($res, 65536);
+						$this->logResource = $res;
+					}
+				}
+
+				if($buf !== "" and $this->logResource !== null){
+					@fwrite($this->logResource, $buf);
+					if(++$flushCounter >= 25){ //~50ms at 2ms loop interval
+						$flushCounter = 0;
+						@fflush($this->logResource);
+					}
+				}
+			}elseif($this->logResource !== null){ //Writing disabled: close the handle, keep draining
+				@fclose($this->logResource);
+				$this->logResource = null;
+			}
+			$buf = "";
+
 			usleep(2000);
 		}
+
+		//Final drain on shutdown so the tail of the log is not lost
+		while($this->logStream->count() > 0){
+			$buf .= $this->logStream->shift();
+		}
+		if($this->write and $buf !== ""){
+			if($this->logResource === null){
+				$this->logResource = @fopen($this->logFile, "ab");
+			}
+			if(is_resource($this->logResource)){
+				@fwrite($this->logResource, $buf);
+				@fflush($this->logResource);
+			}
+		}
+		if(is_resource($this->logResource)){
+			@fclose($this->logResource);
+		}
+		$this->logResource = null;
 	}
 
 	public function setWrite($write){

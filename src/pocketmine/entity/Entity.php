@@ -919,7 +919,10 @@ abstract class Entity extends Location implements Metadatable{
 
 		$diffMotion = ($this->motionX - $this->lastMotionX) ** 2 + ($this->motionY - $this->lastMotionY) ** 2 + ($this->motionZ - $this->lastMotionZ) ** 2;
 
-		if($diffPosition > 0.04 or $diffRotation > 2.25 and ($diffMotion > 0.0001 and $this->getMotion()->lengthSquared() <= 0.00001)){ //0.2 ** 2, 1.5 ** 2
+		//inline of getMotion()->lengthSquared(): avoids allocating two Vector3 per call
+		$motionLenSq = $this->motionX * $this->motionX + $this->motionY * $this->motionY + $this->motionZ * $this->motionZ;
+
+		if($diffPosition > 0.04 or $diffRotation > 2.25 and ($diffMotion > 0.0001 and $motionLenSq <= 0.00001)){ //0.2 ** 2, 1.5 ** 2
 			$this->lastX = $this->x;
 			$this->lastY = $this->y;
 			$this->lastZ = $this->z;
@@ -930,7 +933,7 @@ abstract class Entity extends Location implements Metadatable{
 			$this->level->addEntityMovement($this->chunk->getX(), $this->chunk->getZ(), $this->id, $this->x, $this->y + $this->getEyeHeight(), $this->z, $this->yaw, $this->pitch, $this->yaw);
 		}
 
-		if($diffMotion > 0.0025 or ($diffMotion > 0.0001 and $this->getMotion()->lengthSquared() <= 0.0001)){ //0.05 ** 2
+		if($diffMotion > 0.0025 or ($diffMotion > 0.0001 and $motionLenSq <= 0.0001)){ //0.05 ** 2
 			$this->lastMotionX = $this->motionX;
 			$this->lastMotionY = $this->motionY;
 			$this->lastMotionZ = $this->motionZ;
@@ -1382,7 +1385,7 @@ abstract class Entity extends Location implements Metadatable{
 	}
 
 	protected function checkBlockCollision(){
-		$vector = new Vector3(0, 0, 0);
+		$vector = $this->temporalVector->setComponents(0, 0, 0); //reuse the entity scratch vector instead of allocating
 
 		foreach($blocksaround = $this->getBlocksAround() as $block){
 			$block->onEntityCollide($this);
@@ -1495,7 +1498,7 @@ abstract class Entity extends Location implements Metadatable{
 	}
 
 	public function setMotion(Vector3 $motion){
-		if(!$this->justCreated){
+		if(!$this->justCreated and EntityMotionEvent::hasHandlers()){ //skip event allocation when no plugin listens
 			$this->server->getPluginManager()->callEvent($ev = new EntityMotionEvent($this, $motion));
 			if($ev->isCancelled()){
 				return false;

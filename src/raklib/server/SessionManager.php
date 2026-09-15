@@ -72,6 +72,15 @@ class SessionManager{
 	protected $block = [];
 	protected $ipSec = [];
 
+	/** @var int MOTD ping 限流: 窗口内允许的最大 ping 次数 */
+	protected $pingLimitPerWindow = 40;
+	/** @var float MOTD ping 限流窗口长度(秒) */
+	protected $pingWindow = 5.0;
+	/** @var int 触发 MOTD 限流后的临时封禁秒数 */
+	protected $pingBanTime = 120;
+	/** @var array MOTD ping 速率跟踪 ip => [windowStart(microtime), count] */
+	protected $pingRate = [];
+
 	/** @var bool 端口校验 (强制关闭: 内外网端口不一致时客户端握手会被拒, MOTD 能看到但进不去) */
 	public $portChecking = false;
 
@@ -160,6 +169,11 @@ class SessionManager{
 			$this->frpSessions[$key] = $tunnel; //记录玩家归属隧道, 回包路由用
 
 			if(ord($data[0]) === UNCONNECTED_PING::$ID or ord($data[0]) === UNCONNECTED_PING_OPEN_CONNECTIONS::$ID){
+				if($this->isMOTDFlood($ip)){ //MOTD 洪水: 临时封禁该 IP
+					$this->getLogger()->notice("Temporarily blocked $ip for {$this->pingBanTime} seconds (MOTD ping flood)");
+					$this->blockAddress($ip, $this->pingBanTime);
+					continue;
+				}
 				$packet = new UNCONNECTED_PING_OPEN_CONNECTIONS();
 				if(ord($data[0]) === UNCONNECTED_PING::$ID){
 					$packet = new UNCONNECTED_PING();
@@ -182,6 +196,31 @@ class SessionManager{
 				$this->streamRaw($ip, $port, $data);
 			}
 		}
+	}
+
+	/**
+	 * MOTD ping (UNCONNECTED_PING) 滑动窗口限流。
+	 * 老逻辑里 ping 只计入 ipSec(每 ~50ms tick 重置, packetLimit=1000),
+	 * 实际等于对 MOTD 洪水没有有效封禁。本方法按 5 秒滑窗统计:
+	 * 窗口内 ping 超过 pingLimitPerWindow 即视为洪水, 调用方应临时封禁。
+	 *
+	 * @param string $ip
+	 *
+	 * @return bool true = 超限(洪水)
+	 */
+	private function isMOTDFlood($ip){
+		$now = microtime(true);
+		if(isset($this->pingRate[$ip])){
+			if(($now - $this->pingRate[$ip][0]) < $this->pingWindow){
+				if(++$this->pingRate[$ip][1] > $this->pingLimitPerWindow){
+					unset($this->pingRate[$ip]);
+					return true;
+				}
+				return false;
+			}
+		}
+		$this->pingRate[$ip] = [$now, 1];
+		return false;
 	}
 
 	private function tickProcessor(){
@@ -227,6 +266,15 @@ class SessionManager{
 				foreach($this->frpSessions as $addr => $v){
 					if(!isset($this->sessions[$addr])){
 						unset($this->frpSessions[$addr]);
+					}
+				}
+			}
+
+			// 清理过期的 MOTD ping 速率窗口(防内存累积)
+			if(count($this->pingRate) > 0){
+				foreach($this->pingRate as $addr => $rate){
+					if(($time - $rate[0]) > $this->pingWindow){
+						unset($this->pingRate[$addr]);
 					}
 				}
 			}
@@ -282,6 +330,11 @@ class SessionManager{
 				return true;
 			}elseif($pid === UNCONNECTED_PING::$ID){
 				//No need to create a session for just pings
+				if($this->isMOTDFlood($source)){ //MOTD 洪水: 临时封禁该 IP
+					$this->getLogger()->notice("Temporarily blocked $source for {$this->pingBanTime} seconds (MOTD ping flood)");
+					$this->blockAddress($source, $this->pingBanTime);
+					return true;
+				}
 				$packet = new UNCONNECTED_PING;
 				$packet->buffer = $buffer;
 				$packet->decode();

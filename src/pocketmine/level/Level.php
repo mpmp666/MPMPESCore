@@ -962,11 +962,14 @@ class Level implements ChunkManager, Metadatable{
 			$this->chunkCache = [];
 			$this->blockCache = [];
 		}else{
-			if(count($this->chunkCache) > 768){
+			//chunkCache entries are compressed BatchPackets (~10-40KB each):
+			//256 entries cap memory at roughly 2.5-10MB per level instead of ~30MB
+			if(count($this->chunkCache) > 256){
 				$this->chunkCache = [];
 			}
 
-			if(count($this->blockCache) > 2048){
+			//blockCache entries are full Block objects; keep the cache hot but bounded
+			if(count($this->blockCache) > 1024){
 				$this->blockCache = [];
 			}
 
@@ -1250,14 +1253,19 @@ class Level implements ChunkManager, Metadatable{
 					if(($fullState >> 4) === 0){
 						continue;
 					}
-					$block = clone $this->blockStates[$fullState & 0xfff];
+					//hasEntityCollision() is position-independent (constant per block
+					//class): check it on the shared instance and skip cloning blocks
+					//that can never collide with entities (stone, dirt, ...)
+					$shared = $this->blockStates[$fullState & 0xfff];
+					if(!$shared->hasEntityCollision()){
+						continue;
+					}
+					$block = clone $shared;
 					$block->x = $x;
 					$block->y = $y;
 					$block->z = $z;
 					$block->level = $this;
-					if($block->hasEntityCollision()){
-						$blocks[Level::blockHash($x, $y, $z)] = $block;
-					}
+					$blocks[Level::blockHash($x, $y, $z)] = $block;
 				}
 			}
 		}
@@ -1387,12 +1395,18 @@ class Level implements ChunkManager, Metadatable{
 					if(($fullState >> 4) === 0){
 						continue;
 					}
-					$block = clone $this->blockStates[$fullState & 0xfff];
+					//canPassThrough() is position-independent (constant per block class):
+					//check it on the shared instance and skip the clone for pass-through blocks
+					$shared = $this->blockStates[$fullState & 0xfff];
+					if($shared->canPassThrough()){
+						continue;
+					}
+					$block = clone $shared;
 					$block->x = $x;
 					$block->y = $y;
 					$block->z = $z;
 					$block->level = $this;
-					if(!$block->canPassThrough() and $block->collidesWithBB($bb)){
+					if($block->collidesWithBB($bb)){
 						$collides[] = $block->getBoundingBox();
 					}
 				}
@@ -3332,7 +3346,7 @@ class Level implements ChunkManager, Metadatable{
 
 	public function unloadChunks($force = false){
 		if(count($this->unloadQueue) > 0){
-			$maxUnload = 96;
+			$maxUnload = 256; //higher batch reclaims chunk memory faster under pressure
 			$now = microtime(true);
 			foreach($this->unloadQueue as $index => $time){
 				Level::getXZ($index, $X, $Z);

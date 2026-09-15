@@ -20,6 +20,7 @@
 - **Nemotron 3 Ultra**
 - **GLM-5.3-Flash**
 - **MiMo V2.5 Free**
+- **Kimi K3**
 
 ## ✨ 新增功能与改进
 
@@ -56,6 +57,31 @@
 - 纯 PHP 实现 `frpc.php`，与服务端同进程/线程非阻塞运行，**无额外 PID、无额外日志文件**
 - 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
 - 指令 `/frp [status|restart|stop]`（仅 OP/控制台）管理隧道
+
+### 🚀 深度性能优化（磁盘 I/O · 内存 · CPU · 事件）
+
+- **磁盘 I/O**：
+  - 日志写盘改为**持久句柄 + 64KB 缓冲批量写**，替代原来每行日志一次 open/write/close
+  - RegionLoader 流缓冲区 16KB → **256KB**，区块读写 syscall 大幅减少
+  - 区块保存写入改用共享零块补齐扇区，省去每次保存一次全尺寸 `str_pad` 字符串复制
+- **内存**：
+  - 区块数据包缓存上限 768 → 256、方块对象缓存 2048 → 1024（每世界省约 20MB 峰值）
+  - 区块卸载批量 96 → 256/tick，低内存时回收更快
+  - 修复 `disable-log` 时日志队列无限增长的泄漏；修复关机时日志线程无法退出、尾部日志丢失的问题
+- **CPU**：
+  - 碰撞检测（`getCollisionCubes` / `getEntityCollidingBlocks`）先用共享实例做常量预检，**普通方块不再每次克隆 Block 对象**
+  - 实体运动更新内联长度计算、碰撞检测复用实体暂存向量，每实体每 tick 省多次对象分配
+  - 日志格式化重构：单次 `clean()` + 按需 `toANSI()`
+  - 实体/Tile 的 Timings 短类名改为字符串截取，去掉每次实体生成的 `ReflectionClass` 分配
+- **事件快速路径**：
+  - 新增 `Event::hasHandlers()` 静态方法；封包收发（×4）、`PlayerMoveEvent`、`EntityMotionEvent` 在**无插件监听时零分配跳过**，有插件监听时事件语义逐字节一致（完全插件兼容）
+
+### 🛡️ 安全防护机制
+
+- **畸形 BatchPacket 死循环修复**：内层封包长度字段原来不做校验，攻击者构造负数长度（如 -4）可让主线程**永久死循环**；现已增加长度合法性检测，发现即**临时封禁该 IP 300 秒**并踢出玩家（正规客户端永不触发，无误伤）
+- **MOTD 探测洪水限流**：`UNCONNECTED_PING` 按 **5 秒滑窗**统计，窗口内超过 40 次即**临时封禁该 IP 120 秒**（本地 UDP 与 frp 喂包两条路径均生效）
+- **假人攻击拦截**：同一 IP 进入第 N 个账号（默认第 3 个）时，**踢出该 IP 全部已在线账号 + 临时封禁该 IP 300 秒**，新连接一并拒绝；IP 经 PROXY v2 还原，走 frp 也无法伪装
+  - `genisys.yml` 可调：`server.max-accounts-per-ip: 3`（0 = 关闭）、`server.accounts-per-ip-ban-time: 300`
 
 ### 🛠️ 漏斗 / 漏斗矿车 修复与增强
 
