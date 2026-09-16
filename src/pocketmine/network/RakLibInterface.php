@@ -141,10 +141,11 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 		if(isset($this->players[$identifier])){
 			try{
 				if($packet->buffer !== ""){
-					$pk = $this->getPacket($packet->buffer);
+					$player = $this->players[$identifier];
+					$pk = $this->getPacket($packet->buffer, $player->getProtocol());
 					if($pk !== null){
 						$pk->decode();
-						$this->players[$identifier]->handleDataPacket($pk);
+						$player->handleDataPacket($pk);
 					}
 				}
 			}catch(\Throwable $e){
@@ -212,17 +213,25 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 		if(isset($this->identifiers[$h = spl_object_hash($player)])){
 			$identifier = $this->identifiers[$h];
 			$pk = null;
+			$newProto = MultiProtocol::isNewProtocol($player->getProtocol());
 			if(!$packet->isEncoded){
 				$packet->encode();
 			}elseif(!$needACK){
-				if(!isset($packet->__encapsulatedPacket)){
-					$packet->__encapsulatedPacket = new CachedEncapsulatedPacket;
-					$packet->__encapsulatedPacket->identifierACK = null;
-					$packet->__encapsulatedPacket->buffer = chr(0x8e) . $packet->buffer;
-					$packet->__encapsulatedPacket->reliability = 3;
-					$packet->__encapsulatedPacket->orderChannel = 0;
+				//encapsulation cache is per wire format: 0.14 content is 0x8e-wrapped,
+				//0.15 content is 0xfe-wrapped with translated ids/fields
+				$cacheProp = $newProto ? "__encapsulatedPacket81" : "__encapsulatedPacket";
+				if(!isset($packet->$cacheProp)){
+					$buffers = $newProto ? MultiProtocol::translateOutgoing($packet) : [$packet->buffer];
+					if(count($buffers) === 0){
+						return null; //packet does not exist in this client's protocol
+					}
+					$packet->$cacheProp = new CachedEncapsulatedPacket;
+					$packet->$cacheProp->identifierACK = null;
+					$packet->$cacheProp->buffer = chr($newProto ? 0xfe : 0x8e) . $buffers[0];
+					$packet->$cacheProp->reliability = 3;
+					$packet->$cacheProp->orderChannel = 0;
 				}
-				$pk = $packet->__encapsulatedPacket;
+				$pk = $packet->$cacheProp;
 			}
 
 			if(!$immediate and !$needACK and $packet::NETWORK_ID !== ProtocolInfo::BATCH_PACKET
@@ -233,14 +242,24 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 			}
 
 			if($pk === null){
-				$pk = new EncapsulatedPacket();
-				$pk->buffer = chr(0x8e) . $packet->buffer;
-				$packet->reliability = 3;
-				$packet->orderChannel = 0;
-
-				if($needACK === true){
-					$pk->identifierACK = $this->identifiersACK[$identifier]++;
+				$buffers = $newProto ? MultiProtocol::translateOutgoing($packet) : [$packet->buffer];
+				if(count($buffers) === 0){
+					return null; //packet does not exist in this client's protocol
 				}
+				foreach($buffers as $outBuffer){
+					$pk = new EncapsulatedPacket();
+					$pk->buffer = chr($newProto ? 0xfe : 0x8e) . $outBuffer;
+					$packet->reliability = 3;
+					$packet->orderChannel = 0;
+
+					if($needACK === true){
+						$pk->identifierACK = $this->identifiersACK[$identifier]++;
+					}
+
+					$this->interface->sendEncapsulated($identifier, $pk, ($needACK === true ? RakLib::FLAG_NEED_ACK : 0) | ($immediate === true ? RakLib::PRIORITY_IMMEDIATE : RakLib::PRIORITY_NORMAL));
+				}
+
+				return $pk->identifierACK;
 			}
 
 			$this->interface->sendEncapsulated($identifier, $pk, ($needACK === true ? RakLib::FLAG_NEED_ACK : 0) | ($immediate === true ? RakLib::PRIORITY_IMMEDIATE : RakLib::PRIORITY_NORMAL));
@@ -251,13 +270,36 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 		return null;
 	}
 
-	private function getPacket($buffer){
+	private function getPacket($buffer, $protocol = null){
+		if(MultiProtocol::isNewProtocol($protocol)){
+			//0.15.x wire: [pid][payload] or [0xfe][pid][payload]
+			$pid = ord($buffer[0]);
+			$start = 1;
+			if($pid === 0xfe){
+				$pid = ord($buffer[1]);
+				$start = 2;
+			}
+			$mapped = MultiProtocol::toServerPid($pid);
+			if($mapped === null or ($data = $this->network->getPacket($mapped)) === null){
+				return null;
+			}
+			$data->setBuffer($buffer, $start);
+
+			return $data;
+		}
+
 		$pid = ord($buffer[1]);
 
 		if(($data = $this->network->getPacket($pid)) === null){
 			$pid = ord($buffer[0]);
 			if(($data = $this->network->getPacket($pid)) === null){
-				return null;
+				//0.15.x wire without prefix (e.g. LOGIN 0x01): try the 0.15->0.14 map
+				$mapped = MultiProtocol::toServerPid($pid);
+				if($mapped === null or ($data = $this->network->getPacket($mapped)) === null){
+					return null;
+				}
+				$data->setBuffer($buffer, 1);
+				return $data;
 			}
 			$data->setBuffer($buffer, 1);
 			return $data;

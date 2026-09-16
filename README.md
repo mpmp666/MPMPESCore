@@ -58,6 +58,18 @@
 - 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
 - 指令 `/frp [status|restart|stop]`（仅 OP/控制台）管理隧道
 
+### 🔀 跨版本互通：0.14 与 0.15 同图同端口
+
+同一个端口同时接受 **MCPE 0.14.x**（协议 45/46/60/70）与 **MCPE 0.15.x**（协议 81-83）客户端，两类玩家在同一张地图上一起玩：
+
+- **登录双格式嗅探**：`LoginPacket` 自动识别 0.14 明文布局与 0.15 JWT 链（zlib + chain/skin token），0.15 的玩家名 / UUID / 皮肤 / 地址全部正常还原
+- **封包 ID 全量重映射**：0.15.0 把全部封包 ID 从 `0x8f..0xca` 改为 `0x01..0x41`，`MultiProtocol` 按玩家协议逐个翻译出站字节
+- **字段级布局适配**：`UpdateBlockPacket`/`SetEntityMotionPacket` 去掉 0.15 已移除的数量前缀；`MoveEntityPacket` 拆分为单实体+字节旋转；`AddEntityPacket` 旋转 ×0.71111 缩放 + 附加 modifiers；`ChangeDimensionPacket` 补 xyz；`RemovePlayerPacket` 映射为 `RemoveEntityPacket`
+- **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15 用 `0xfe` 前缀，出站按玩家协议分别封装
+- **批量包按协议分组**：广播/批量压缩流按 0.14/0.15 分组各压一份，互不串包
+- **区块缓存按协议分组**：同一区块的压缩批包按 0.14/0.15 各缓存一份，内存友好
+- MOTD 保持 0.14 原生公告（协议 70），0.15 客户端直接连即可（与 axe.ink 同款方案）
+
 ### 🚀 深度性能优化（磁盘 I/O · 内存 · CPU · 事件）
 
 - **磁盘 I/O**：

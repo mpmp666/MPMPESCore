@@ -90,6 +90,7 @@ use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\CompressBatchedTask;
+use pocketmine\network\MultiProtocol;
 use pocketmine\network\Network;
 use pocketmine\network\protocol\BatchPacket;
 use pocketmine\network\protocol\CraftingDataPacket;
@@ -2303,16 +2304,25 @@ private function lookupAddress($address) {
 	public static function broadcastPacket(array $players, DataPacket $packet){
 		$packet->encode();
 		$packet->isEncoded = true;
-		if(Network::$BATCH_THRESHOLD >= 0 and strlen($packet->buffer) >= Network::$BATCH_THRESHOLD){
-			Server::getInstance()->batchPackets($players, [$packet->buffer], false);
-			return;
-		}
-
+		//split recipients by wire protocol: each group needs its own translated bytes
+		$groups = [[], []];
 		foreach($players as $player){
-			$player->dataPacket($packet);
+			$groups[MultiProtocol::isNewProtocol($player->getProtocol()) ? 1 : 0][] = $player;
+		}
+		foreach($groups as $groupPlayers){
+			if(Network::$BATCH_THRESHOLD >= 0 and strlen($packet->buffer) >= Network::$BATCH_THRESHOLD){
+				Server::getInstance()->batchPackets($groupPlayers, [$packet], false);
+			}else{
+				foreach($groupPlayers as $player){
+					$player->dataPacket($packet);
+				}
+			}
 		}
 		if(isset($packet->__encapsulatedPacket)){
 			unset($packet->__encapsulatedPacket);
+		}
+		if(isset($packet->__encapsulatedPacket81)){
+			unset($packet->__encapsulatedPacket81);
 		}
 	}
 
@@ -2325,35 +2335,48 @@ private function lookupAddress($address) {
 	 */
 	public function batchPackets(array $players, array $packets, $forceSync = false){
 		Timings::$playerNetworkTimer->startTiming();
-		$str = "";
 
-		foreach($packets as $p){
-			if($p instanceof DataPacket){
-				if(!$p->isEncoded){
-					$p->encode();
-				}
-				$str .= Binary::writeInt(strlen($p->buffer)) . $p->buffer;
-			}else{
-				$str .= Binary::writeInt(strlen($p)) . $p;
-			}
-		}
-
-		$targets = [];
+		//group targets by wire protocol: 0.14 clients get native bytes,
+		//0.15 clients get id-remapped + layout-adjusted bytes
+		$groups = [[], []];
 		foreach($players as $p){
 			if($p->isConnected()){
-				$targets[] = $this->identifiers[spl_object_hash($p)];
+				$groups[MultiProtocol::isNewProtocol($p->getProtocol()) ? 1 : 0][] = $this->identifiers[spl_object_hash($p)];
 			}
 		}
 
-		if(!$forceSync and $this->networkCompressionAsync){
-			$task = new CompressBatchedTask($str, $targets, $this->networkCompressionLevel);
-			$this->getScheduler()->scheduleAsyncTask($task);
-		}else{
-			$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, $this->networkCompressionLevel);
-			if($compressed === false){
-				$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, 1);
+		foreach([0, 1] as $newProto){
+			if(count($groups[$newProto]) === 0){
+				continue;
 			}
-			$this->broadcastPacketsCallback($compressed, $targets);
+			$str = "";
+			foreach($packets as $p){
+				if($p instanceof DataPacket){
+					if(!$p->isEncoded){
+						$p->encode();
+					}
+					$buffers = $newProto ? MultiProtocol::translateOutgoing($p) : [$p->buffer];
+				}else{
+					$buffers = $newProto ? MultiProtocol::translateOutgoing($p) : [$p];
+				}
+				foreach($buffers as $b){
+					$str .= Binary::writeInt(strlen($b)) . $b;
+				}
+			}
+			if($str === ""){
+				continue;
+			}
+
+			if(!$forceSync and $this->networkCompressionAsync){
+				$task = new CompressBatchedTask($str, $groups[$newProto], $this->networkCompressionLevel);
+				$this->getScheduler()->scheduleAsyncTask($task);
+			}else{
+				$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, $this->networkCompressionLevel);
+				if($compressed === false){
+					$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, 1);
+				}
+				$this->broadcastPacketsCallback($compressed, $groups[$newProto]);
+			}
 		}
 
 		Timings::$playerNetworkTimer->stopTiming();

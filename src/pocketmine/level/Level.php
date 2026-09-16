@@ -92,6 +92,7 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\nbt\tag\LongTag;
+use pocketmine\network\MultiProtocol;
 use pocketmine\network\protocol\DataPacket;
 use pocketmine\network\protocol\FullChunkDataPacket;
 use pocketmine\network\protocol\LevelEventPacket;
@@ -2809,14 +2810,23 @@ class Level implements ChunkManager, Metadatable{
 
 	private function sendChunkFromCache($x, $z){
 		if(isset($this->chunkSendTasks[$index = Level::chunkHash($x, $z)])){
-			foreach($this->chunkSendQueue[$index] as $player){
+			foreach($this->chunkSendQueue[$index] as $loaderId => $player){
 				/** @var Player $player */
-				if($player->isConnected() and isset($player->usedChunks[$index])){
-					$player->sendChunk($x, $z, $this->chunkCache[$index]);
+				if(!$player->isConnected() or !isset($player->usedChunks[$index])){
+					unset($this->chunkSendQueue[$index][$loaderId]);
+					continue;
+				}
+				//chunk batches are cached per wire protocol group (0 = 0.14.x, 1 = 0.15.x)
+				$group = MultiProtocol::isNewProtocol($player->getProtocol()) ? 1 : 0;
+				if(isset($this->chunkCache[$index][$group])){
+					$player->sendChunk($x, $z, $this->chunkCache[$index][$group]);
+					unset($this->chunkSendQueue[$index][$loaderId]);
 				}
 			}
-			unset($this->chunkSendQueue[$index]);
-			unset($this->chunkSendTasks[$index]);
+			if(count($this->chunkSendQueue[$index]) === 0){
+				unset($this->chunkSendQueue[$index]);
+				unset($this->chunkSendTasks[$index]);
+			}
 		}
 	}
 
@@ -2834,7 +2844,11 @@ class Level implements ChunkManager, Metadatable{
 				$this->chunkSendTasks[$index] = true;
 				if(isset($this->chunkCache[$index])){
 					$this->sendChunkFromCache($x, $z);
-					continue;
+					if(!isset($this->chunkSendQueue[$index])){
+						continue;
+					}
+					//players of the other protocol group still need their cache built:
+					//fall through and request a fresh task (its callback has the payload)
 				}
 				$this->timings->syncChunkSendPrepareTimer->startTiming();
 				$task = $this->provider->requestChunkTask($x, $z);
@@ -2852,23 +2866,31 @@ class Level implements ChunkManager, Metadatable{
 		$this->timings->syncChunkSendTimer->startTiming();
 
 		$index = Level::chunkHash($x, $z);
-
-		if(!isset($this->chunkCache[$index]) and $this->cacheChunks and $this->server->getMemoryManager()->canUseChunkCache()){
-			$this->chunkCache[$index] = Player::getChunkCacheFromData($x, $z, $payload, $ordering);
-			$this->sendChunkFromCache($x, $z);
-			$this->timings->syncChunkSendTimer->stopTiming();
-			return;
-		}
+		$useCache = $this->cacheChunks and $this->server->getMemoryManager()->canUseChunkCache();
 
 		if(isset($this->chunkSendTasks[$index])){
 			foreach($this->chunkSendQueue[$index] as $player){
 				/** @var Player $player */
 				if($player->isConnected() and isset($player->usedChunks[$index])){
-					$player->sendChunk($x, $z, $payload, $ordering);
+					if($useCache){
+						//build the per-protocol-group cache lazily from the payload
+						$group = MultiProtocol::isNewProtocol($player->getProtocol()) ? 1 : 0;
+						if(!isset($this->chunkCache[$index][$group])){
+							$this->chunkCache[$index][$group] = Player::getChunkCacheFromData($x, $z, $payload, $ordering, $player->getProtocol());
+						}
+						$player->sendChunk($x, $z, $this->chunkCache[$index][$group]);
+					}else{
+						//uncached: raw payload goes through batchDataPacket -> batchPackets,
+						//which translates ids per protocol and compresses async
+						$player->sendChunk($x, $z, $payload, $ordering);
+					}
 				}
 			}
 			unset($this->chunkSendQueue[$index]);
 			unset($this->chunkSendTasks[$index]);
+		}elseif($useCache and !isset($this->chunkCache[$index])){
+			//no waiting players: pre-build the native (0.14.x) group cache for future requests
+			$this->chunkCache[$index][0] = Player::getChunkCacheFromData($x, $z, $payload, $ordering);
 		}
 		$this->timings->syncChunkSendTimer->stopTiming();
 	}

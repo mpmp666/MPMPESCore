@@ -23,6 +23,9 @@ namespace pocketmine\network\protocol;
 
 #include <rules/DataPacket.h>
 
+use pocketmine\utils\Binary;
+use pocketmine\utils\UUID;
+
 
 class LoginPacket extends DataPacket{
 	const NETWORK_ID = Info::LOGIN_PACKET;
@@ -40,13 +43,18 @@ class LoginPacket extends DataPacket{
 	public $skin = null;
 
 	public function decode(){
+		//Cross-version sniff: 0.15.x (protocol 81+) logins start with a protocol
+		//int followed by zlib-compressed JWT chain data; 0.14.x logins start with
+		//the username string (whose first 4 bytes can never be a small int).
+		$peek = Binary::readInt(substr($this->buffer, $this->offset, 4));
+		if($peek >= 81 and $peek <= 83){
+			$this->decode015($peek);
+			return;
+		}
+
 		$this->username = $this->getString();
 		$this->protocol1 = $this->getInt();
 		$this->protocol2 = $this->getInt();
-		/*if($this->protocol1 < Info::CURRENT_PROTOCOL){ //New fields!
-			$this->setBuffer(null, 0); //Skip batch packet handling
-			return;
-		}*/
 		$this->clientId = $this->getLong();
 		$this->clientUUID = $this->getUUID();
 		$this->serverAddress = $this->getString();
@@ -56,8 +64,70 @@ class LoginPacket extends DataPacket{
 		$this->skin = $this->getString();
 	}
 
+	/**
+	 * MCPE 0.15.x login: [protocol int][zlib int len + data]
+	 * decompressed: [LInt chain json][LInt skin jwt]
+	 * The JWTs are read without signature verification (same as Genisys 0.15.0).
+	 */
+	private function decode015($protocol){
+		$this->protocol1 = $this->getInt();
+		$this->protocol2 = 0;
+
+		$str = @zlib_decode($this->get($this->getInt()));
+		if($str === false){
+			throw new \InvalidStateException("Invalid compressed login data");
+		}
+		$this->setBuffer($str, 0);
+
+		$this->clientSecret = "";
+		$chainData = json_decode($this->get($this->getLInt()));
+		if(isset($chainData->{"chain"}) and is_array($chainData->{"chain"})){
+			foreach($chainData->{"chain"} as $chain){
+				$webtoken = self::decodeToken($chain);
+				if(isset($webtoken["extraData"])){
+					if(isset($webtoken["extraData"]["displayName"])){
+						$this->username = $webtoken["extraData"]["displayName"];
+					}
+					if(isset($webtoken["extraData"]["identity"])){
+						$this->clientUUID = UUID::fromString($webtoken["extraData"]["identity"]);
+					}
+				}
+			}
+		}
+
+		$skinToken = self::decodeToken($this->get($this->getLInt()));
+		if(isset($skinToken["ClientRandomId"])){
+			$this->clientId = $skinToken["ClientRandomId"];
+		}
+		if(isset($skinToken["ServerAddress"])){
+			$this->serverAddress = $skinToken["ServerAddress"];
+		}
+		if(isset($skinToken["SkinData"])){
+			$this->skin = base64_decode($skinToken["SkinData"]);
+		}
+		if(isset($skinToken["SkinId"])){
+			$this->skinName = $skinToken["SkinId"];
+		}
+		if($this->skinName === null){
+			$this->skinName = "Standard_Custom";
+		}
+		if($this->clientUUID === null){
+			$this->clientUUID = UUID::fromRandom();
+		}
+	}
+
 	public function encode(){
 
+	}
+
+	private static function decodeToken($token){
+		$tokens = explode(".", $token);
+		if(count($tokens) < 2){
+			return [];
+		}
+		list($headB64, $payloadB64, $sigB64) = $tokens;
+
+		return json_decode(base64_decode($payloadB64), true) ?: [];
 	}
 
 }

@@ -120,6 +120,7 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
+use pocketmine\network\MultiProtocol;
 use pocketmine\network\Network;
 use pocketmine\network\protocol\AdventureSettingsPacket;
 use pocketmine\network\protocol\AnimatePacket;
@@ -2617,14 +2618,24 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($len > 16 or $len < 3){
 					$valid = false;
 				}
-				for($i = 0; $i < $len and $valid; ++$i){
-					$c = ord($packet->username[$i]);
-					if(($c >= ord("a") and $c <= ord("z")) or ($c >= ord("A") and $c <= ord("Z")) or ($c >= ord("0") and $c <= ord("9")) or $c === ord("_")){
-						continue;
+				if(MultiProtocol::isNewProtocol($this->protocol)){
+					//0.15.x gamertags may contain spaces / non-ASCII: only reject control chars
+					for($i = 0; $i < $len and $valid; ++$i){
+						if(ord($packet->username[$i]) < 0x20){
+							$valid = false;
+							break;
+						}
 					}
+				}else{
+					for($i = 0; $i < $len and $valid; ++$i){
+						$c = ord($packet->username[$i]);
+						if(($c >= ord("a") and $c <= ord("z")) or ($c >= ord("A") and $c <= ord("Z")) or ($c >= ord("0") and $c <= ord("9")) or $c === ord("_")){
+							continue;
+						}
 
-					$valid = false;
-					break;
+						$valid = false;
+						break;
+					}
 				}
 
 				if(!$valid or $this->iusername === "rcon" or $this->iusername === "console"){
@@ -4771,9 +4782,10 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	 * @param     $chunkZ
 	 * @param     $payload
 	 * @param int $ordering
+	 * @param int $protocol 目标客户端协议(0.14=70 原生, 0.15=81+ 需重映射封包ID)
 	 * @return BatchPacket|FullChunkDataPacket
 	 */
-	public static function getChunkCacheFromData($chunkX, $chunkZ, $payload, $ordering = FullChunkDataPacket::ORDER_COLUMNS){
+	public static function getChunkCacheFromData($chunkX, $chunkZ, $payload, $ordering = FullChunkDataPacket::ORDER_COLUMNS, $protocol = ProtocolInfo::CURRENT_PROTOCOL){
 		$pk = new FullChunkDataPacket();
 		$pk->chunkX = $chunkX;
 		$pk->chunkZ = $chunkZ;
@@ -4781,13 +4793,23 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$pk->data = $payload;
 		if(Network::$BATCH_THRESHOLD >= 0){
 			$pk->encode();
+			$buffer = $pk->getBuffer();
+			$newProto = MultiProtocol::isNewProtocol($protocol);
+			if($newProto){
+				//0.15: inner FullChunkDataPacket id 0xbf -> 0x34
+				$buffer = chr(MultiProtocol::toClientPid(ProtocolInfo::FULL_CHUNK_DATA_PACKET)) . substr($buffer, 1);
+			}
 			$batch = new BatchPacket();
-			$compressed = @zlib_encode(Binary::writeInt(strlen($pk->getBuffer())) . $pk->getBuffer(), ZLIB_ENCODING_DEFLATE, Server::getInstance()->networkCompressionLevel);
+			$compressed = @zlib_encode(Binary::writeInt(strlen($buffer)) . $buffer, ZLIB_ENCODING_DEFLATE, Server::getInstance()->networkCompressionLevel);
 			if($compressed === false){
-				$compressed = @zlib_encode(Binary::writeInt(strlen($pk->getBuffer())) . $pk->getBuffer(), ZLIB_ENCODING_DEFLATE, 1);
+				$compressed = @zlib_encode(Binary::writeInt(strlen($buffer)) . $buffer, ZLIB_ENCODING_DEFLATE, 1);
 			}
 			$batch->payload = $compressed;
 			$batch->encode();
+			if($newProto){
+				//0.15: batch wrapper id 0x92 -> 0x06
+				$batch->buffer[0] = chr(MultiProtocol::toClientPid(ProtocolInfo::BATCH_PACKET));
+			}
 			$batch->isEncoded = true;
 			return $batch;
 		}

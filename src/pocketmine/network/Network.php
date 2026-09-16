@@ -238,6 +238,10 @@ class Network {
 		if($str === false){
 			return; //corrupt zlib stream, just drop it
 		}
+		//0.15.x clients send batch inner items as [pid][payload] with the new ids;
+		//0.14.x sends [0x8e][pid][payload]. Resolve per player protocol.
+		$newProto = MultiProtocol::isNewProtocol($p->getProtocol());
+		$minInner = $newProto ? 1 : 2;
 		$len = strlen($str);
 		$offset = 0;
 		try {
@@ -250,7 +254,7 @@ class Network {
 					return;
 				}
 				$pkLen = Binary::readInt(substr($str, $offset, 4));
-				if($pkLen < 2 or $pkLen > $len - $offset - 4){ //min: 0x8e + packet id; max: remaining bytes
+				if($pkLen < $minInner or $pkLen > $len - $offset - 4){ //min packet size; max: remaining bytes
 					$this->flagMalformedBatch($p, "invalid inner packet length $pkLen");
 					return;
 				}
@@ -259,12 +263,13 @@ class Network {
 				$buf = substr($str, $offset, $pkLen);
 				$offset += $pkLen;
 
-				if (($pk = $this->getPacket(ord($buf[1]))) !== null) {
+				$pid = $newProto ? MultiProtocol::toServerPid(ord($buf[0])) : ord($buf[1]);
+				if ($pid !== null and ($pk = $this->getPacket($pid)) !== null) {
 					if ($pk::NETWORK_ID === Info::BATCH_PACKET) {
 						throw new \InvalidStateException("Invalid BatchPacket inside BatchPacket");
 					}
 
-					$pk->setBuffer($buf, 2);
+					$pk->setBuffer($buf, $newProto ? 1 : 2);
 
 					$pk->decode();
 					$p->handleDataPacket($pk);

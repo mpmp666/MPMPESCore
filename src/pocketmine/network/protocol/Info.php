@@ -31,7 +31,8 @@ interface Info{
 	 * Actual Minecraft: PE protocol version
 	 */
 	const CURRENT_PROTOCOL = 70;
-	const ACCEPTED_PROTOCOLS = [45, 46, 60, 70];
+	//45/46/60/70 = MCPE 0.14.x; 81-83 = MCPE 0.15.x (JWT login, translated by MultiProtocol)
+	const ACCEPTED_PROTOCOLS = [45, 46, 60, 70, 81, 82, 83];
 
 	const LOGIN_PACKET = 0x8f;
 	const PLAY_STATUS_PACKET = 0x90;
