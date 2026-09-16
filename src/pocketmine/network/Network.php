@@ -263,13 +263,31 @@ class Network {
 				$buf = substr($str, $offset, $pkLen);
 				$offset += $pkLen;
 
-				$pid = $newProto ? MultiProtocol::toServerPid(ord($buf[0])) : ord($buf[1]);
+				if($newProto){
+					$pid = MultiProtocol::toServerPid(ord($buf[0]));
+					$bufOffset = 1;
+				}elseif($p->getProtocol() === null){
+					//protocol not known yet (login may ride inside this batch): detect per item
+					$pid = ord($buf[1]);
+					$bufOffset = 2;
+					if($this->getPacket($pid) === null){
+						$mapped = MultiProtocol::toServerPid(ord($buf[0]));
+						if($mapped !== null){
+							$pid = $mapped;
+							$bufOffset = 1;
+						}
+					}
+				}else{
+					$pid = ord($buf[1]);
+					$bufOffset = 2;
+				}
+
 				if ($pid !== null and ($pk = $this->getPacket($pid)) !== null) {
 					if ($pk::NETWORK_ID === Info::BATCH_PACKET) {
 						throw new \InvalidStateException("Invalid BatchPacket inside BatchPacket");
 					}
 
-					$pk->setBuffer($buf, $newProto ? 1 : 2);
+					$pk->setBuffer($buf, $bufOffset);
 
 					$pk->decode();
 					$p->handleDataPacket($pk);

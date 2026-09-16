@@ -2577,11 +2577,19 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					break;
 				}
 
+				$this->protocol = $packet->protocol1;
+
+				//0.15.x clients expect PLAY_STATUS LOGIN_SUCCESS immediately after LOGIN
+				if(MultiProtocol::isNewProtocol($this->protocol)){
+					$pk = new PlayStatusPacket();
+					$pk->status = PlayStatusPacket::LOGIN_SUCCESS;
+					$this->dataPacket($pk);
+				}
+
 				$this->username = TextFormat::clean($packet->username);
 				$this->displayName = $this->username;
 				$this->setNameTag($this->username);
 				$this->iusername = strtolower($this->username);
-				$this->protocol = $packet->protocol1;
 
 				if(count($this->server->getOnlinePlayers()) >= $this->server->getMaxPlayers() and $this->kick("disconnectionScreen.serverFull", false)){
 					break;
