@@ -293,12 +293,18 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 		if(($data = $this->network->getPacket($pid)) === null){
 			$pid = ord($buffer[0]);
 			if(($data = $this->network->getPacket($pid)) === null){
-				//0.15.x wire without prefix (e.g. LOGIN 0x01): try the 0.15->0.14 map
+				//0.15.x wire (protocol not known yet, e.g. LOGIN): optional 0xfe
+				//prefix, then [pid][payload] with 0.15 ids
+				$start = 1;
+				if($pid === 0xfe){
+					$pid = ord($buffer[1]);
+					$start = 2;
+				}
 				$mapped = MultiProtocol::toServerPid($pid);
 				if($mapped === null or ($data = $this->network->getPacket($mapped)) === null){
 					return null;
 				}
-				$data->setBuffer($buffer, 1);
+				$data->setBuffer($buffer, $start);
 				return $data;
 			}
 			$data->setBuffer($buffer, 1);
