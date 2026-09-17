@@ -2488,7 +2488,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			round($this->x, 4),
 			round($this->y, 4),
 			round($this->z, 4)
-		]));
+		]) . TextFormat::GREEN . " [Protocol: " . $this->getProtocol() . "]" . TextFormat::WHITE);
 		/*if($this->isOp()){
 			$this->setRemoveFormat(false);
 		}*/
@@ -2597,7 +2597,6 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 				//0.14.x = 45/46/60/70; 0.15.x 及之后 JWT 登录族(81-99)按 0.15 线路接入
 				if(!in_array($packet->protocol1, ProtocolInfo::ACCEPTED_PROTOCOLS) and !($packet->protocol1 >= 81 and $packet->protocol1 <= 99)){
-					$this->server->getLogger()->notice("[LoginDebug] rejected protocol=" . $packet->protocol1 . " name='" . $packet->username . "' from " . $this->getAddress() . ":" . $this->getPort());
 					if($packet->protocol1 < ProtocolInfo::CURRENT_PROTOCOL){
 						$message = "disconnectionScreen.outdatedClient";
 

@@ -30,7 +30,6 @@ class MainLogger extends \AttachableThreadedLogger{
 	protected $logStream;
 	protected $shutdown;
 	protected $logDebug;
-	private $logResource;
 	/** @var MainLogger */
 	public static $logger = null;
 	
@@ -289,9 +288,13 @@ class MainLogger extends \AttachableThreadedLogger{
 	 * (file_put_contents with FILE_APPEND) for every single log line.
 	 * The queue is always drained, even when writing is disabled, so the
 	 * shared logStream can never grow without bound (memory leak fix).
+	 *
+	 * NB: pmmpthread forbids storing resources/plain objects in ThreadSafe
+	 * properties (NonThreadSafeValueError) — the log handle must stay a LOCAL
+	 * variable of the thread, like RakLibServer does with SessionManager.
 	 */
 	public function onRun(){
-		$this->logResource = null;
+		$logResource = null;
 		$buf = "";
 		$flushCounter = 0;
 
@@ -301,24 +304,24 @@ class MainLogger extends \AttachableThreadedLogger{
 			}
 
 			if($this->write){
-				if($this->logResource === null){
+				if($logResource === null){
 					$res = @fopen($this->logFile, "ab");
 					if(is_resource($res)){
 						stream_set_write_buffer($res, 65536);
-						$this->logResource = $res;
+						$logResource = $res;
 					}
 				}
 
-				if($buf !== "" and $this->logResource !== null){
-					@fwrite($this->logResource, $buf);
+				if($buf !== "" and $logResource !== null){
+					@fwrite($logResource, $buf);
 					if(++$flushCounter >= 25){ //~50ms at 2ms loop interval
 						$flushCounter = 0;
-						@fflush($this->logResource);
+						@fflush($logResource);
 					}
 				}
-			}elseif($this->logResource !== null){ //Writing disabled: close the handle, keep draining
-				@fclose($this->logResource);
-				$this->logResource = null;
+			}elseif($logResource !== null){ //Writing disabled: close the handle, keep draining
+				@fclose($logResource);
+				$logResource = null;
 			}
 			$buf = "";
 
@@ -330,18 +333,17 @@ class MainLogger extends \AttachableThreadedLogger{
 			$buf .= $this->logStream->shift();
 		}
 		if($this->write and $buf !== ""){
-			if($this->logResource === null){
-				$this->logResource = @fopen($this->logFile, "ab");
+			if($logResource === null){
+				$logResource = @fopen($this->logFile, "ab");
 			}
-			if(is_resource($this->logResource)){
-				@fwrite($this->logResource, $buf);
-				@fflush($this->logResource);
+			if(is_resource($logResource)){
+				@fwrite($logResource, $buf);
+				@fflush($logResource);
 			}
 		}
-		if(is_resource($this->logResource)){
-			@fclose($this->logResource);
+		if(is_resource($logResource)){
+			@fclose($logResource);
 		}
-		$this->logResource = null;
 	}
 
 	public function setWrite($write){
