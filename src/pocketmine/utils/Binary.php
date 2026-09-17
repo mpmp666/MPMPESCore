@@ -259,6 +259,7 @@ class Binary{
 	 * @return int
 	 */
 	public static function readShort($str){
+		if(strlen($str) < 2) return 0; //guard against truncated/malformed packets
 		return unpack("n", $str)[1];
 	}
 
@@ -351,6 +352,7 @@ class Binary{
 	}
 
 	public static function readFloat($str){
+		if(strlen($str) < 4) return 0.0; //guard against truncated/malformed packets
 		return ENDIANNESS === self::BIG_ENDIAN ? unpack("f", $str)[1] : unpack("f", strrev($str))[1];
 	}
 
@@ -371,6 +373,7 @@ class Binary{
 	}
 
 	public static function readDouble($str){
+		if(strlen($str) < 8) return 0.0; //guard against truncated/malformed packets
 		return ENDIANNESS === self::BIG_ENDIAN ? unpack("d", $str)[1] : unpack("d", strrev($str))[1];
 	}
 
@@ -387,6 +390,7 @@ class Binary{
 	}
 
 	public static function readLong($x){
+		if(strlen($x) < 8) return 0; //guard against truncated/malformed packets
 		if(PHP_INT_SIZE === 8){
 			$int = unpack("N*", $x);
 			return ($int[1] << 32) | $int[2];

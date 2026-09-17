@@ -43,11 +43,12 @@ class LoginPacket extends DataPacket{
 	public $skin = null;
 
 	public function decode(){
-		//Cross-version sniff: 0.15.x (protocol 81+) logins start with a protocol
-		//int followed by zlib-compressed JWT chain data; 0.14.x logins start with
-		//the username string (whose first 4 bytes can never be a small int).
+		//Cross-version sniff: 0.14.x logins start with the username string, whose
+		//first 4 bytes (LShort length >= 3 + two name chars) can never be a small
+		//int. JWT-era logins (0.15.x and up: 81, 82, 83, 84, 90, ...) start with a
+		//small positive protocol int followed by zlib-compressed chain data.
 		$peek = Binary::readInt(substr($this->buffer, $this->offset, 4));
-		if($peek >= 81 and $peek <= 83){
+		if($peek > 0 and $peek < 65536){
 			$this->decode015($peek);
 			return;
 		}
