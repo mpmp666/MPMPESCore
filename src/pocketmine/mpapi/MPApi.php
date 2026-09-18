@@ -25,13 +25,14 @@ use pocketmine\entity\Entity;
 use pocketmine\level\Level;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Vector3;
+use pocketmine\network\MultiProtocol;
 use pocketmine\Player;
 
 /**
- * MPApi — MPMPESCore 高性能 API 体系(当前版本 1.0)
+ * MPApi — MPMPESCore 高性能 API 体系(当前版本 1.1)
  *
  * 插件用法:
- * 1. 在 plugin.yml 中声明 `mpapi: "1.0"`(可选;不声明也能正常加载,
+ * 1. 在 plugin.yml 中声明 `mpapi: "1.1"`(可选;不声明也能正常加载,
  *    但仅保证普通 API 的兼容性;声明版本高于服务端 MPApi 版本的插件会被禁用)。
  * 2. 通过本门面类调用,如 MPApi::getFullStateAt($level, $x, $y, $z);
  *    或直接调用 Level 上的同名方法 $level->getFullStateAt(...),二者等价。
@@ -44,7 +45,7 @@ use pocketmine\Player;
  */
 final class MPApi{
 
-	const VERSION = "1.0";
+	const VERSION = "1.1";
 
 	private function __construct(){
 	}
@@ -94,6 +95,31 @@ final class MPApi{
 	 */
 	public static function getPlayerEntryAddress(Player $player) : string{
 		return $player->getAddress() . ":" . $player->getPort();
+	}
+
+	/**
+	 * 获取玩家的客户端协议版本号。
+	 * 0.14.x = 45/46/60/70; 0.15.x = 81-83(及 JWT 登录族 81-99)。
+	 * 登录日志同样会附带该值。
+	 *
+	 * @param Player $player
+	 *
+	 * @return int
+	 */
+	public static function getPlayerProtocol(Player $player) : int{
+		return (int) $player->getProtocol();
+	}
+
+	/**
+	 * 玩家是否使用 0.15.x 及之后的新版线路格式(封包 ID 0x01 起, 0xfe 封装)。
+	 * 需要按版本区分行为(如仅对 0.14 客户端发某特性包)时使用。
+	 *
+	 * @param Player $player
+	 *
+	 * @return bool
+	 */
+	public static function isNewProtocolPlayer(Player $player) : bool{
+		return MultiProtocol::isNewProtocol($player->getProtocol());
 	}
 
 	/**
@@ -432,9 +458,9 @@ final class MPApi{
 
 	/**
 	 * 获取所有 frp 隧道状态信息:
-	 * name / logFile / proxyProtocolVersion / pid(是否在运行)
+	 * name / state / ready / runId / proxyProtocolVersion / serverAddr / serverPort / remotePorts / tls
 	 *
-	 * @return array<string, array{name:string,logFile:string,proxyProtocolVersion:string,pid:int|false}>
+	 * @return array<string, array{name:string,state:string,ready:bool,runId:string,proxyProtocolVersion:string,serverAddr:string,serverPort:int,remotePorts:int[],tls:bool}>
 	 */
 	public static function getFrpTunnels() : array{
 		$mgr = self::getFrpManager();
@@ -466,6 +492,57 @@ final class MPApi{
 			return false;
 		}
 		$mgr->shutdown();
+		return true;
+	}
+
+	/**
+	 * 重启单条 frp 隧道(重新读取其 toml 配置)。
+	 *
+	 * @param string $name 隧道名(frp / frp_xxx, 即 frp*.toml 去后缀)
+	 *
+	 * @return bool 隧道是否存在且成功重启
+	 */
+	public static function restartFrpTunnel(string $name) : bool{
+		$mgr = self::getFrpManager();
+		return $mgr !== null and $mgr->restartTunnel($name);
+	}
+
+	/**
+	 * 停止单条 frp 隧道(配置保留, 可用 startFrpTunnel 恢复)。
+	 *
+	 * @param string $name
+	 *
+	 * @return bool
+	 */
+	public static function stopFrpTunnel(string $name) : bool{
+		$mgr = self::getFrpManager();
+		return $mgr !== null and $mgr->stopTunnel($name);
+	}
+
+	/**
+	 * 启动单条已停止的 frp 隧道。
+	 *
+	 * @param string $name
+	 *
+	 * @return bool
+	 */
+	public static function startFrpTunnel(string $name) : bool{
+		$mgr = self::getFrpManager();
+		return $mgr !== null and $mgr->startTunnel($name);
+	}
+
+	/**
+	 * 重扫 frp*.toml: 新增配置自动启动, 修改过的自动重启, 删除的自动停止。
+	 * 无需重启服务器即可调整隧道。
+	 *
+	 * @return bool
+	 */
+	public static function reloadFrpTunnels() : bool{
+		$mgr = self::getFrpManager();
+		if($mgr === null){
+			return false;
+		}
+		$mgr->reload();
 		return true;
 	}
 }

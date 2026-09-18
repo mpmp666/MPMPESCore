@@ -3,7 +3,7 @@
 **MPMPESCore** 是一个修改版的 Minecraft: 基岩版（MCPE）服务端核心，由 mpmpes 基于 **Genisys** 构建。
 
 - 核心名称：`MPMPESCore`
-- 版本：`1.0`
+- 版本：`1.1`
 - 基于：[Genisys](https://github.com/iTXTech/Genisys)（iTX Technologies 出品的 PocketMine-MP 分支）
 - 源码：https://github.com/mpmp666/MPMPESCore
 - 此代码100%AI生成 请勿找茬
@@ -36,7 +36,7 @@
 - `genisys.yml` 中通过 `astral.allow-astral`、`ender.allow-ender`、`nether.allow-nether` 独立开关
 - 维度名称可自定义（`astral.level-name`、`ender.level-name`、`nether.level-name`）
 
-### ⚡ MPApi 1.0 —— 高性能插件 API
+### ⚡ MPApi 1.1 —— 高性能插件 API
 
 零分配、零缓存污染、不触发区块加载的高性能接口，适合大规模循环/批量操作：
 
@@ -46,17 +46,18 @@
 - **高度图**：`getHighestBlockAt()` —— 基于 chunk heightMap，零扫描开销
 - **AI 控制器**：`getAI()` —— 刷怪、仇恨半径、追击速度动态调整
 - **地图媒体 API**：`createDynamicMap()` / `setMapImageFromFile()` / `getMapItem()` —— 支持 **Bad Apple 视频播放**、**图片展示**、**物品展示框渲染**（动态地图 ID 从 20000 起，不落盘，重登需补发）
-- **frp 隧道 API**：`isFrpEnabled()` / `getFrpTunnels()` / `restartFrp()` / `stopFrp()`
+- **frp 隧道 API**：`isFrpEnabled()` / `getFrpTunnels()` / `restartFrp()` / `stopFrp()`，1.1 新增单隧道控制 `restartFrpTunnel($name)` / `stopFrpTunnel($name)` / `startFrpTunnel($name)` 与免重启重扫配置 `reloadFrpTunnels()`
 - **玩家真实地址**：`getPlayerAddress()` / `getPlayerPort()` / `getPlayerEntryAddress()` —— 经 PROXY v2 还原
+- **玩家协议版本**（1.1 新增）：`getPlayerProtocol()` —— 0.14.x=45/46/60/70、0.15.x=81+；`isNewProtocolPlayer()` —— 是否 0.15 新版线路格式
 
-> 插件在 `plugin.yml` 声明 `mpapi: "1.0"` 即可使用；版本高于服务端的插件会被自动禁用。
+> 插件在 `plugin.yml` 声明 `mpapi: "1.1"` 即可使用；版本高于服务端的插件会被自动禁用。
 
 ### 🚇 内置 frp 内网穿透（同进程零依赖）
 
 - 服务器根目录放 `frp.toml`（默认）或 `frp_<名字>.toml`（多隧道）即可自动启动
 - 纯 PHP 实现 `frpc.php`，与服务端同进程/线程非阻塞运行，**无额外 PID、无额外日志文件**
 - 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
-- 指令 `/frp [status|restart|stop]`（仅 OP/控制台）管理隧道
+- 指令 `/frp [status|start|restart|stop|reload] [隧道名]`（仅 OP/控制台）管理隧道：`status` 查看（含 frps 地址/远程端口/TLS/run_id），`restart`/`stop`/`start` 支持单隧道名，`reload` 免重启重扫 `frp*.toml`（新增自动启动、变更自动重启、删除自动停止）
 
 ### 🔀 跨版本互通：0.14 与 0.15 同图同端口
 
@@ -155,7 +156,7 @@
 
 - `ver` / `version` / `about` —— 显示核心名称、版本、API 版本、PHP 版本、**MPApi 版本**
 - `status` —— 显示 TPS / 在线玩家数
-- `frp` —— 内置 frp 隧道管理（仅 OP/控制台）：`/frp [status|restart|stop]`
+- `frp` —— 内置 frp 隧道管理（仅 OP/控制台）：`/frp [status|start|restart|stop|reload] [隧道名]`
 - 支持标准的 PocketMine / Genisys 指令
 
 ## 许可证

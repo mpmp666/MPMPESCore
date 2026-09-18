@@ -169,6 +169,7 @@ class FrpManager{
 			"tomlPath"             => $tomlPath,
 			"proxyProtocolVersion" => $pp,
 			"client"               => null,
+			"mtime"                => @filemtime($tomlPath) ?: 0,
 		];
 		return true;
 	}
@@ -181,24 +182,116 @@ class FrpManager{
 			return;
 		}
 		$this->ensureLoaded();
-		$logger = $this->server->getLogger();
-		foreach($this->tunnels as $name => &$t){
-			$cfg = \pocketmine\frp\load_config($t["tomlPath"]);
-			if($cfg === null){
-				$logger->error("隧道 $name 配置无效, 跳过");
-				continue;
-			}
-			$client = new \pocketmine\frp\Frpc($cfg);
-			if($this->rakLib !== null){
-				$this->rakLib->ensureFrpOutQueue($name);
-			}
-			$client->setRakLib($this->rakLib);
-			$client->setTunnelName($name);
-			$client->start();
-			$t["client"] = $client;
-			$logger->info("内置 PHP frpc 已启动 (隧道 $name, 服务端进程内运行)");
+		foreach(array_keys($this->tunnels) as $name){
+			$this->startTunnel($name);
 		}
+	}
+
+	/**
+	 * 启动单条隧道(已启动则跳过)
+	 *
+	 * @param string $name
+	 *
+	 * @return bool 是否成功启动
+	 */
+	public function startTunnel(string $name) : bool{
+		if(!isset($this->tunnels[$name])){
+			return false;
+		}
+		$t = &$this->tunnels[$name];
+		if($t["client"] !== null){
+			unset($t);
+			return true; //已在运行
+		}
+		$this->ensureLoaded();
+		$logger = $this->server->getLogger();
+		$cfg = \pocketmine\frp\load_config($t["tomlPath"]);
+		if($cfg === null){
+			$logger->error("隧道 $name 配置无效, 跳过");
+			unset($t);
+			return false;
+		}
+		$client = new \pocketmine\frp\Frpc($cfg);
+		if($this->rakLib !== null){
+			$this->rakLib->ensureFrpOutQueue($name);
+		}
+		$client->setRakLib($this->rakLib);
+		$client->setTunnelName($name);
+		$client->start();
+		$t["client"] = $client;
 		unset($t);
+		$logger->info("内置 PHP frpc 已启动 (隧道 $name, 服务端进程内运行)");
+		return true;
+	}
+
+	/**
+	 * 停止单条隧道(配置保留, 可用 startTunnel 恢复)
+	 *
+	 * @param string $name
+	 *
+	 * @return bool 隧道是否存在
+	 */
+	public function stopTunnel(string $name) : bool{
+		if(!isset($this->tunnels[$name])){
+			return false;
+		}
+		if($this->tunnels[$name]["client"] !== null){
+			$this->tunnels[$name]["client"]->stop();
+			$this->tunnels[$name]["client"] = null;
+		}
+		return true;
+	}
+
+	/**
+	 * 重启单条隧道(重新读取其 toml 配置)
+	 *
+	 * @param string $name
+	 *
+	 * @return bool
+	 */
+	public function restartTunnel(string $name) : bool{
+		if(!$this->stopTunnel($name)){
+			return false;
+		}
+		return $this->startTunnel($name);
+	}
+
+	/**
+	 * 重新扫描 frp*.toml: 新增配置自动启动, 修改过的自动重启, 删除的自动停止。
+	 * 无需重启服务器即可调整隧道。
+	 */
+	public function reload(){
+		$this->ensureLoaded();
+		$logger = $this->server->getLogger();
+		$dataPath = $this->server->getDataPath();
+		$files = glob($dataPath . "frp*.toml");
+		if($files === false){
+			$files = [];
+		}
+		sort($files);
+		$seen = [];
+		foreach($files as $file){
+			$name = substr(basename($file), 0, -5);
+			$seen[$name] = true;
+			$mtime = @filemtime($file);
+			if(!isset($this->tunnels[$name])){
+				if($this->prepareTunnel($file)){
+					$this->startTunnel($name);
+					$logger->info("新增 frp 隧道 $name 已启动");
+				}
+			}elseif($mtime !== false and $mtime !== ($this->tunnels[$name]["mtime"] ?? 0)){
+				$this->restartTunnel($name);
+				$this->tunnels[$name]["mtime"] = $mtime;
+				$logger->info("frp 隧道 $name 配置已变更, 已重启");
+			}
+		}
+		foreach(array_keys($this->tunnels) as $name){
+			if(!isset($seen[$name])){
+				$this->stopTunnel($name);
+				unset($this->tunnels[$name]);
+				$logger->info("frp 隧道 $name 配置已删除, 已停止");
+			}
+		}
 	}
 
 	/**
@@ -229,26 +322,11 @@ class FrpManager{
 	 */
 	public function restartAll(){
 		$this->ensureLoaded();
-		foreach($this->tunnels as $name => &$t){
-			if($t["client"] !== null){
-				$t["client"]->stop();
+		foreach(array_keys($this->tunnels) as $name){
+			if($this->restartTunnel($name)){
+				$this->server->getLogger()->info("已重启 frp 隧道 $name");
 			}
-			$cfg = \pocketmine\frp\load_config($t["tomlPath"]);
-			if($cfg === null){
-				$this->server->getLogger()->error("隧道 $name 配置无效, 跳过");
-				continue;
-			}
-			$client = new \pocketmine\frp\Frpc($cfg);
-			if($this->rakLib !== null){
-				$this->rakLib->ensureFrpOutQueue($name);
-			}
-			$client->setRakLib($this->rakLib);
-			$client->setTunnelName($name);
-			$client->start();
-			$t["client"] = $client;
-			$this->server->getLogger()->info("已重启 frp 隧道 $name");
 		}
-		unset($t);
 	}
 
 	/**
@@ -290,7 +368,7 @@ class FrpManager{
 	/**
 	 * 获取所有隧道状态信息(进程内运行, 无独立 PID)
 	 *
-	 * @return array<string, array{name:string,state:string,ready:bool,runId:string,proxyProtocolVersion:string}>
+	 * @return array<string, array{name:string,state:string,ready:bool,runId:string,proxyProtocolVersion:string,serverAddr:string,serverPort:int,remotePorts:int[],tls:bool}>
 	 */
 	public function getTunnels() : array{
 		$out = [];
@@ -298,10 +376,18 @@ class FrpManager{
 			$state = "stopped";
 			$ready = false;
 			$runId = "";
+			$serverAddr = "";
+			$serverPort = 0;
+			$remotePorts = [];
+			$tls = false;
 			if($t["client"] !== null){
 				$state = $t["client"]->getStateName();
 				$ready = $t["client"]->isReady();
 				$runId = $t["client"]->getRunId();
+				$serverAddr = $t["client"]->getServerAddr();
+				$serverPort = $t["client"]->getServerPort();
+				$remotePorts = $t["client"]->getRemotePorts();
+				$tls = $t["client"]->isTls();
 			}
 			$out[$name] = [
 				"name"                 => $name,
@@ -309,6 +395,10 @@ class FrpManager{
 				"ready"                => $ready,
 				"runId"                => $runId,
 				"proxyProtocolVersion" => $t["proxyProtocolVersion"],
+				"serverAddr"           => $serverAddr,
+				"serverPort"           => $serverPort,
+				"remotePorts"          => $remotePorts,
+				"tls"                  => $tls,
 			];
 		}
 		return $out;

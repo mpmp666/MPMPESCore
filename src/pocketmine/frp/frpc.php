@@ -680,6 +680,30 @@ class Frpc{
 		return $this->runId;
 	}
 
+	/** frps 服务器地址(配置信息, 供 /frp status 与 API 展示) */
+	public function getServerAddr() : string{
+		return (string) ($this->conf['serverAddr'] ?? "");
+	}
+
+	/** frps 服务器端口 */
+	public function getServerPort() : int{
+		return (int) ($this->conf['serverPort'] ?? 0);
+	}
+
+	/** 当前控制连接是否使用 TLS */
+	public function isTls() : bool{
+		return $this->useTls;
+	}
+
+	/** 所有 UDP 代理的远程端口列表 */
+	public function getRemotePorts() : array{
+		$out = [];
+		foreach($this->proxies as $p){
+			$out[] = (int) $p['remotePort'];
+		}
+		return $out;
+	}
+
 	/**
 	 * 强制停止(服务端关闭时调用)
 	 */
