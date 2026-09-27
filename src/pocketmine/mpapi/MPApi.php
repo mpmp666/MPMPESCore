@@ -99,7 +99,7 @@ final class MPApi{
 
 	/**
 	 * 获取玩家的客户端协议版本号。
-	 * 0.14.x = 45/46/60/70; 0.15.x = 81-83(及 JWT 登录族 81-99)。
+	 * 0.13.x = 37/38/39; 0.14.x = 45/46/60/70; 0.15.x = 81-83; 0.16.x = 90/91。
 	 * 登录日志同样会附带该值。
 	 *
 	 * @param Player $player
@@ -111,7 +111,7 @@ final class MPApi{
 	}
 
 	/**
-	 * 玩家是否使用 0.15.x 及之后的新版线路格式(封包 ID 0x01 起, 0xfe 封装)。
+	 * 玩家是否使用 0.15.x 及之后的新版线路格式(封包 ID 0x01 起, 0xfe 封装, 含 0.16)。
 	 * 需要按版本区分行为(如仅对 0.14 客户端发某特性包)时使用。
 	 *
 	 * @param Player $player
@@ -119,7 +119,7 @@ final class MPApi{
 	 * @return bool
 	 */
 	public static function isNewProtocolPlayer(Player $player) : bool{
-		return MultiProtocol::isNewProtocol($player->getProtocol());
+		return MultiProtocol::isJwtProtocol($player->getProtocol());
 	}
 
 	/**

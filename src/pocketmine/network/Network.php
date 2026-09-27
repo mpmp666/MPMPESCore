@@ -240,9 +240,12 @@ class Network {
 		}
 		//0.15.x clients send batch inner items as [pid][payload] with the new ids;
 		//0.14.x sends [0x8e][pid][payload]; 0.13.x sends bare [pid][payload] with 0.14 ids.
-		$newProto = MultiProtocol::isNewProtocol($p->getProtocol());
-		$oldProto = MultiProtocol::isOldProtocol($p->getProtocol());
-		$minInner = ($newProto or $oldProto) ? 1 : 2;
+		//0.16.x sends [pid][payload] with its own ids and uvarint inner lengths.
+		$family = MultiProtocol::wireFamily($p->getProtocol());
+		$newProto = ($family === 1);
+		$oldProto = ($family === 2);
+		$is16 = ($family === 3);
+		$minInner = ($newProto or $oldProto or $is16) ? 1 : 2;
 		$len = strlen($str);
 		$offset = 0;
 		try {
@@ -250,19 +253,36 @@ class Network {
 				//The inner packet length is attacker-controlled data. Without
 				//validation, a crafted value (e.g. -4) makes $offset stand still
 				//or move backwards: the main thread loops forever (DoS).
-				if($len - $offset < 5){ //4-byte length + at least 1 byte of packet data
-					$this->flagMalformedBatch($p, "trailing " . ($len - $offset) . " byte(s)");
-					return;
+				if($is16){
+					$pkLen = Binary::readUnsignedVarInt($str, $offset);
+					if($pkLen < 1 or $pkLen > $len - $offset){
+						$this->flagMalformedBatch($p, "invalid inner packet length $pkLen");
+						return;
+					}
+				}else{
+					if($len - $offset < 5){ //4-byte length + at least 1 byte of packet data
+						$this->flagMalformedBatch($p, "trailing " . ($len - $offset) . " byte(s)");
+						return;
+					}
+					$pkLen = Binary::readInt(substr($str, $offset, 4));
+					if($pkLen < $minInner or $pkLen > $len - $offset - 4){ //min packet size; max: remaining bytes
+						$this->flagMalformedBatch($p, "invalid inner packet length $pkLen");
+						return;
+					}
+					$offset += 4;
 				}
-				$pkLen = Binary::readInt(substr($str, $offset, 4));
-				if($pkLen < $minInner or $pkLen > $len - $offset - 4){ //min packet size; max: remaining bytes
-					$this->flagMalformedBatch($p, "invalid inner packet length $pkLen");
-					return;
-				}
-				$offset += 4;
 
 				$buf = substr($str, $offset, $pkLen);
 				$offset += $pkLen;
+
+				if($is16){
+					//0.16 inner items: bare [pid][payload] with 0.16 ids
+					$pk = MultiProtocol::decodeIncoming16($buf);
+					if($pk !== null){
+						$p->handleDataPacket($pk);
+					}
+					continue;
+				}
 
 				if($newProto){
 					$pid = MultiProtocol::toServerPid(ord($buf[0]));

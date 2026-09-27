@@ -32,6 +32,7 @@ interface Info{
 	 */
 	const CURRENT_PROTOCOL = 70;
 	//37/38/39 = MCPE 0.13.x; 45/46/60/70 = MCPE 0.14.x; 81-83 = MCPE 0.15.x (translated by MultiProtocol)
+	//90/91 = MCPE 0.16.x: 翻译层已写好(MultiProtocol family 3)但实机有多个已知问题, 暂时禁止接入
 	const ACCEPTED_PROTOCOLS = [37, 38, 39, 45, 46, 60, 70, 81, 82, 83];
 
 	const LOGIN_PACKET = 0x8f;

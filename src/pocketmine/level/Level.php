@@ -2816,8 +2816,9 @@ class Level implements ChunkManager, Metadatable{
 					unset($this->chunkSendQueue[$index][$loaderId]);
 					continue;
 				}
-				//chunk batches are cached per wire protocol group (0 = 0.14.x, 1 = 0.15.x)
-				$group = MultiProtocol::isNewProtocol($player->getProtocol()) ? 1 : 0;
+				//chunk batches are cached per wire protocol group (0 = 0.13.x/0.14.x, 1 = 0.15.x, 3 = 0.16.x)
+				$family = MultiProtocol::wireFamily($player->getProtocol());
+				$group = $family === 2 ? 0 : $family;
 				if(isset($this->chunkCache[$index][$group])){
 					$player->sendChunk($x, $z, $this->chunkCache[$index][$group]);
 					unset($this->chunkSendQueue[$index][$loaderId]);
@@ -2874,7 +2875,9 @@ class Level implements ChunkManager, Metadatable{
 				if($player->isConnected() and isset($player->usedChunks[$index])){
 					if($useCache){
 						//build the per-protocol-group cache lazily from the payload
-						$group = MultiProtocol::isNewProtocol($player->getProtocol()) ? 1 : 0;
+						//(0.13 shares the 0.14 group; 0.15/0.16 have their own)
+						$family = MultiProtocol::wireFamily($player->getProtocol());
+						$group = $family === 2 ? 0 : $family;
 						if(!isset($this->chunkCache[$index][$group])){
 							$this->chunkCache[$index][$group] = Player::getChunkCacheFromData($x, $z, $payload, $ordering, $player->getProtocol());
 						}

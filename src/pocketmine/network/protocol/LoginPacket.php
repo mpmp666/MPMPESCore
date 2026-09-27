@@ -75,7 +75,9 @@ class LoginPacket extends DataPacket{
 	}
 
 	/**
-	 * MCPE 0.15.x login: [protocol int][zlib int len + data]
+	 * MCPE 0.15.x/0.16.x login:
+	 *   0.15: [protocol int][int zlib len][zlib data]
+	 *   0.16: [protocol int][byte gameEdition][uvarint zlib len][zlib data]
 	 * decompressed: [LInt chain json][LInt skin jwt]
 	 * The JWTs are read without signature verification (same as Genisys 0.15.0).
 	 */
@@ -83,7 +85,14 @@ class LoginPacket extends DataPacket{
 		$this->protocol1 = $this->getInt();
 		$this->protocol2 = 0;
 
-		$str = @zlib_decode($this->get($this->getInt()));
+		if($this->protocol1 >= 90){
+			//0.16: gameEdition byte, then the zlib payload length is a uvarint
+			$this->getByte();
+			$zlibLen = Binary::readUnsignedVarInt($this->buffer, $this->offset);
+			$str = @zlib_decode(substr($this->buffer, $this->offset, $zlibLen));
+		}else{
+			$str = @zlib_decode($this->get($this->getInt()));
+		}
 		if($str === false){
 			throw new \InvalidStateException("Invalid compressed login data");
 		}

@@ -142,6 +142,18 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 			try{
 				if($packet->buffer !== ""){
 					$player = $this->players[$identifier];
+					if(MultiProtocol::is016Protocol($player->getProtocol())){
+						//0.16 wire: [0xfe][pid][payload] or [pid][payload] inside batches
+						$buf = $packet->buffer;
+						if(strlen($buf) > 1 and $buf[0] === "\xfe"){
+							$buf = substr($buf, 1);
+						}
+						$pk = MultiProtocol::decodeIncoming16($buf);
+						if($pk !== null){
+							$player->handleDataPacket($pk);
+						}
+						return;
+					}
 					$pk = $this->getPacket($packet->buffer, $player->getProtocol());
 					if($pk !== null){
 						$pk->decode();

@@ -436,4 +436,56 @@ class Binary{
 		return strrev(self::writeLong($value));
 	}
 
+	// ---- 0.16 wire primitives (zigzag varint) ----
+
+	public static function writeVarInt($v){
+		return self::writeUnsignedVarInt(($v << 1) ^ ($v >> (PHP_INT_SIZE === 8 ? 63 : 31)));
+	}
+
+	public static function writeUnsignedVarInt($v){
+		$buf = "";
+		$v &= 0xFFFFFFFF;
+		for($i = 0; $i < 5; $i++){
+			$w = $v & 0x7f;
+			$v = (($v >> 7) & (PHP_INT_MAX >> 6));
+			if($v !== 0){
+				$buf .= chr($w | 0x80);
+			}else{
+				$buf .= chr($w);
+				return $buf;
+			}
+		}
+		return $buf;
+	}
+
+	/**
+	 * Reads an unsigned varint32 from $str at $offset (offset is advanced).
+	 * Truncated / overlong input returns what was decoded so far.
+	 */
+	public static function readUnsignedVarInt($str, &$offset){
+		$value = 0;
+		$shift = 0;
+		$len = strlen($str);
+		while(true){
+			if($offset >= $len or $shift > 28){
+				return $value;
+			}
+			$b = ord($str[$offset++]);
+			$value |= (($b & 0x7f) << $shift);
+			$shift += 7;
+			if(!($b & 0x80)){
+				return $value;
+			}
+		}
+	}
+
+	/**
+	 * Reads a zigzag-encoded signed varint32 from $str at $offset.
+	 */
+	public static function readVarInt($str, &$offset){
+		$raw = self::readUnsignedVarInt($str, $offset);
+		$temp = ((($raw << 31) >> 31) ^ $raw) >> 1;
+		return $temp ^ ($raw & (1 << 31));
+	}
+
 }

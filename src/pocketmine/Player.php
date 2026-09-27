@@ -1390,6 +1390,45 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	}
 
 	/**
+	 * 0.16 clients validate slash commands locally against the
+	 * AvailableCommandsPacket payload. Builds the Genisys 0.16-style command
+	 * data JSON (one version per command, default rawtext overload) and sends it.
+	 */
+	private function sendCommandData16(){
+		$data = new \stdClass();
+		$count = 0;
+		foreach($this->server->getCommandMap()->getCommands() as $command){
+			$version = new \stdClass();
+			$version->aliases = array_values($command->getAliases());
+			$desc = $command->getDescription();
+			$version->description = ($desc === null or $desc === "") ? $command->getName() : $desc;
+			$version->permission = "any";
+
+			$param = new \stdClass();
+			$param->name = "args";
+			$param->type = "rawtext";
+			$param->optional = true;
+			$overload = new \stdClass();
+			$overload->input = new \stdClass();
+			$overload->input->parameters = [$param];
+			$overload->output = new \stdClass();
+			$version->overloads = new \stdClass();
+			$version->overloads->default = $overload;
+
+			$name = $command->getName();
+			$data->$name = new \stdClass();
+			$data->$name->versions = [$version];
+			$count++;
+		}
+		if($count === 0){
+			return;
+		}
+		$pk = new \pocketmine\network\protocol\AvailableCommandsPacket();
+		$pk->commands = json_encode($data);
+		$this->dataPacket($pk);
+	}
+
+	/**
 	 * Sends all the option flags
 	 */
 	public function sendSettings(){
@@ -2455,6 +2494,18 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$pk = new PlayStatusPacket();
 		$pk->status = PlayStatusPacket::LOGIN_SUCCESS;
 		$this->dataPacket($pk);
+
+		if(MultiProtocol::is016Protocol($this->protocol)){
+			//TODO(0.16 已禁用, 见 Info::ACCEPTED_PROTOCOLS): 以下 0.16 握手逻辑保留备用
+			//0.16 clients wait for the resource-pack handshake before StartGame;
+			//an empty list tells them there is nothing to download.
+			$this->dataPacket(new \pocketmine\network\protocol\ResourcePacksInfoPacket());
+			//0.16 validates slash commands CLIENT-SIDE against this list — an
+			//empty one makes the client reject every command as "not found"
+			//without ever sending it to the server.
+			$this->sendCommandData16();
+		}
+
 		if($this->spawnPosition === null and isset($this->namedtag->SpawnLevel) and ($level = $this->server->getLevelByName($this->namedtag["SpawnLevel"])) instanceof Level){
 			$this->spawnPosition = new Position($this->namedtag["SpawnX"], $this->namedtag["SpawnY"], $this->namedtag["SpawnZ"], $level);
 		}
@@ -2595,8 +2646,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 				$this->protocol = $packet->protocol1;
 
-				//0.15.x clients expect PLAY_STATUS LOGIN_SUCCESS immediately after LOGIN
-				if(MultiProtocol::isNewProtocol($this->protocol)){
+				//0.15.x/0.16.x clients expect PLAY_STATUS LOGIN_SUCCESS immediately after LOGIN
+				if(MultiProtocol::isJwtProtocol($this->protocol)){
 					$pk = new PlayStatusPacket();
 					$pk->status = PlayStatusPacket::LOGIN_SUCCESS;
 					$this->dataPacket($pk);
@@ -2611,8 +2662,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					break;
 				}
 
-				//0.14.x = 45/46/60/70; 0.15.x 及之后 JWT 登录族(81-99)按 0.15 线路接入
-				if(!in_array($packet->protocol1, ProtocolInfo::ACCEPTED_PROTOCOLS) and !($packet->protocol1 >= 81 and $packet->protocol1 <= 99)){
+				//0.14.x = 45/46/60/70; 0.15.x 及之后 JWT 登录族按 0.15 线路接入
+				//(0.16 = 90/91 已暂时禁止接入, 见 Info::ACCEPTED_PROTOCOLS 注释)
+				if(!in_array($packet->protocol1, ProtocolInfo::ACCEPTED_PROTOCOLS) and !($packet->protocol1 >= 81 and $packet->protocol1 <= 89)){
 					if($packet->protocol1 < ProtocolInfo::CURRENT_PROTOCOL){
 						$message = "disconnectionScreen.outdatedClient";
 
@@ -2643,8 +2695,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				if($len > 16 or $len < 3){
 					$valid = false;
 				}
-				if(MultiProtocol::isNewProtocol($this->protocol)){
-					//0.15.x gamertags may contain spaces / non-ASCII: only reject control chars
+				if(MultiProtocol::isJwtProtocol($this->protocol)){
+					//0.15.x/0.16.x gamertags may contain spaces / non-ASCII: only reject control chars
 					for($i = 0; $i < $len and $valid; ++$i){
 						if(ord($packet->username[$i]) < 0x20){
 							$valid = false;
@@ -2801,7 +2853,10 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				break;
 			case ProtocolInfo::USE_ITEM_PACKET:
 				/** @var UseItemPacket $pk */
-				$packet->decodeAdditional($this->protocol);
+				if(!MultiProtocol::is016Protocol($this->protocol)){
+					//0.16 packets arrive fully decoded via MultiProtocol::decodeIncoming16()
+					$packet->decodeAdditional($this->protocol);
+				}
 				if($this->spawned === false or !$this->isAlive() or $this->blocked){
 					break;
 				}
@@ -3588,6 +3643,37 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				$this->level->dropItem($this->add(0, 1.3, 0), $dropItem, $motion, 40);
 
 				$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, false);
+				break;
+			case \pocketmine\network\protocol\CommandStepPacket::NETWORK_ID: //0.16 clients run slash commands through this
+				//TODO(0.16 已知问题 #5): /gm 1 仍回显用法, args 展平未生效 —— 需要真机
+				//抓 0x4c 原始包核对 decodeIncoming16() 的字段偏移(command/overload/
+				//uvarint×2/bool/uvarint64/args json)与 args JSON 真实结构
+				if($this->spawned === false or !$this->isAlive()){
+					break;
+				}
+				$this->craftingType = 0;
+				$commandText = $packet->command;
+				//0.16 sends args as a JSON array of {"name","type","value"} objects
+				//(or a plain map): flatten to plain values before rebuilding the line
+				if(is_array($packet->args)){
+					foreach($packet->args as $arg){
+						if(is_array($arg)){
+							$arg = isset($arg["value"]) ? $arg["value"] : (isset($arg["text"]) ? $arg["text"] : reset($arg));
+						}
+						if(!is_scalar($arg)){
+							continue;
+						}
+						$commandText .= " " . $arg;
+					}
+				}
+				$this->server->getPluginManager()->callEvent($ev = new PlayerCommandPreprocessEvent($this, "/" . $commandText));
+				if($ev->isCancelled()){
+					break;
+				}
+
+				Timings::$playerCommandTimer->startTiming();
+				$this->server->dispatchCommand($ev->getPlayer(), substr($ev->getMessage(), 1));
+				Timings::$playerCommandTimer->stopTiming();
 				break;
 			case ProtocolInfo::TEXT_PACKET:
 				if($this->spawned === false or !$this->isAlive()){
@@ -4822,6 +4908,26 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$pk->order = $ordering;
 		$pk->data = $payload;
 		if(Network::$BATCH_THRESHOLD >= 0){
+			$family = MultiProtocol::wireFamily($protocol);
+			if($family === 3){
+				//0.16: [0x39][varint x][varint z][byte order][uvarint len][data],
+				//batch inner length is a uvarint and the wrapper id is 0x06
+				//(NB: this file's Binary alias is raklib\Binary, varint helpers live in utils)
+				$buffer = "\x39" . \pocketmine\utils\Binary::writeVarInt($chunkX) . \pocketmine\utils\Binary::writeVarInt($chunkZ)
+					. chr($ordering) . \pocketmine\utils\Binary::writeUnsignedVarInt(strlen($payload)) . $payload;
+				$inner = \pocketmine\utils\Binary::writeUnsignedVarInt(strlen($buffer)) . $buffer;
+				$compressed = @zlib_encode($inner, ZLIB_ENCODING_DEFLATE, Server::getInstance()->networkCompressionLevel);
+				if($compressed === false){
+					$compressed = @zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 1);
+				}
+				$batch = new BatchPacket();
+				$batch->payload = $compressed;
+				$batch->encode();
+				//native wrapper is [0x92][int len]; 0.16 wants [0x06][uvarint len]
+				$batch->buffer = "\x06" . \pocketmine\utils\Binary::writeUnsignedVarInt(strlen($compressed)) . $compressed;
+				$batch->isEncoded = true;
+				return $batch;
+			}
 			$pk->encode();
 			$buffer = $pk->getBuffer();
 			$newProto = MultiProtocol::isNewProtocol($protocol);

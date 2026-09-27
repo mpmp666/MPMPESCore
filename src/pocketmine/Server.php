@@ -2308,9 +2308,9 @@ private function lookupAddress($address) {
 	public static function broadcastPacket(array $players, DataPacket $packet){
 		$packet->encode();
 		$packet->isEncoded = true;
-		//split recipients by wire family (0.13 bare / 0.14 0x8e / 0.15 0xfe):
+		//split recipients by wire family (0.13 bare / 0.14 0x8e / 0.15 0xfe / 0.16 0xfe+varint):
 		//each group needs its own translated bytes
-		$groups = [[], [], []];
+		$groups = [[], [], [], []];
 		foreach($players as $player){
 			$groups[MultiProtocol::wireFamily($player->getProtocol())][] = $player;
 		}
@@ -2335,6 +2335,9 @@ private function lookupAddress($address) {
 		if(isset($packet->__encapsulatedPacket13)){
 			unset($packet->__encapsulatedPacket13);
 		}
+		if(isset($packet->__encapsulatedPacket16)){
+			unset($packet->__encapsulatedPacket16);
+		}
 	}
 
 	/**
@@ -2348,8 +2351,8 @@ private function lookupAddress($address) {
 		Timings::$playerNetworkTimer->startTiming();
 
 		//group targets by wire family: each group gets its own translated payload
-		//(0.13 tail fields trimmed / 0.15 ids remapped / 0.14 native)
-		$groups = [[], [], []];
+		//(0.13 tail fields trimmed / 0.15 ids remapped / 0.16 re-encoded / 0.14 native)
+		$groups = [[], [], [], []];
 		foreach($players as $p){
 			if($p->isConnected()){
 				$groups[MultiProtocol::wireFamily($p->getProtocol())][] = $this->identifiers[spl_object_hash($p)];
@@ -2363,7 +2366,8 @@ private function lookupAddress($address) {
 			$str = "";
 			foreach($packets as $p){
 				foreach(MultiProtocol::translateForFamily($family, $p) as $b){
-					$str .= Binary::writeInt(strlen($b)) . $b;
+					//0.16 batch inner items use an unsigned varint length
+					$str .= ($family === 3 ? Binary::writeUnsignedVarInt(strlen($b)) : Binary::writeInt(strlen($b))) . $b;
 				}
 			}
 			if($str === ""){
@@ -2834,6 +2838,9 @@ private function lookupAddress($address) {
 		$pk = new PlayerListPacket();
 		$pk->type = PlayerListPacket::TYPE_ADD;
 		foreach($this->playerList as $player){
+			if($p === $player){
+				continue; //fixes duplicates (0.16 pause menu lists the player twice otherwise)
+			}
 			$pk->entries[] = [$player->getUniqueId(), $player->getId(), $player->getDisplayName(), $player->getSkinName(), $player->getSkinData()];
 		}
 
