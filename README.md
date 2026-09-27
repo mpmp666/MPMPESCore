@@ -1,6 +1,6 @@
 # MPMPESCore
 
-**MPMPESCore** 是一个修改版的 Minecraft: 基岩版（MCPE）服务端核心，由 mpmpes 基于 **Genisys** 构建。
+**MPMPESCore** 是一个修改版的 Minecraft: 基岩版（MCPE）服务端核心，由 mpmpes 基于 **Genisys** 构建。**已实现 0.13 / 0.14 / 0.15 三版本同服互通。**
 
 - 核心名称：`MPMPESCore`
 - 版本：`1.1`
@@ -48,7 +48,7 @@
 - **地图媒体 API**：`createDynamicMap()` / `setMapImageFromFile()` / `getMapItem()` —— 支持 **Bad Apple 视频播放**、**图片展示**、**物品展示框渲染**（动态地图 ID 从 20000 起，不落盘，重登需补发）
 - **frp 隧道 API**：`isFrpEnabled()` / `getFrpTunnels()` / `restartFrp()` / `stopFrp()`，1.1 新增单隧道控制 `restartFrpTunnel($name)` / `stopFrpTunnel($name)` / `startFrpTunnel($name)` 与免重启重扫配置 `reloadFrpTunnels()`
 - **玩家真实地址**：`getPlayerAddress()` / `getPlayerPort()` / `getPlayerEntryAddress()` —— 经 PROXY v2 还原
-- **玩家协议版本**（1.1 新增）：`getPlayerProtocol()` —— 0.14.x=45/46/60/70、0.15.x=81+；`isNewProtocolPlayer()` —— 是否 0.15 新版线路格式
+- **玩家协议版本**（1.1 新增）：`getPlayerProtocol()` —— 0.13.x=37/38/39、0.14.x=45/46/60/70、0.15.x=81+；`isNewProtocolPlayer()` —— 是否 0.15 新版线路格式
 
 > 插件在 `plugin.yml` 声明 `mpapi: "1.1"` 即可使用；版本高于服务端的插件会被自动禁用。
 
@@ -59,17 +59,21 @@
 - 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
 - 指令 `/frp [status|start|restart|stop|reload] [隧道名]`（仅 OP/控制台）管理隧道：`status` 查看（含 frps 地址/远程端口/TLS/run_id），`restart`/`stop`/`start` 支持单隧道名，`reload` 免重启重扫 `frp*.toml`（新增自动启动、变更自动重启、删除自动停止）
 
-### 🔀 跨版本互通：0.14 与 0.15 同图同端口
+### 🔀 跨版本互通：0.13 / 0.14 / 0.15 同图同端口
 
-**我们支持 0.14 到 0.15 互通。** 同一个端口同时接受 **MCPE 0.14.x**（协议 45/46/60/70）与 **MCPE 0.15.x**（协议 81-83，含 JWT 登录族 81-99）客户端，两类玩家在同一张地图上一起玩：
+**我们支持 0.13 到 0.15 互通。** 同一个端口同时接受 **MCPE 0.13.x**（协议 37/38/39）、**MCPE 0.14.x**（协议 45/46/60/70）与 **MCPE 0.15.x**（协议 81-83，含 JWT 登录族 81-99）客户端，三类玩家在同一张地图上一起玩：
 
-- **登录双格式嗅探**：`LoginPacket` 自动识别 0.14 明文布局与 0.15 JWT 链（zlib + chain/skin token），0.15 的玩家名 / UUID / 皮肤 / 地址全部正常还原
-- **封包 ID 全量重映射**：0.15.0 把全部封包 ID 从 `0x8f..0xca` 改为 `0x01..0x41`，`MultiProtocol` 按玩家协议逐个翻译出站字节
+- **登录双格式嗅探**：`LoginPacket` 自动识别 0.13/0.14 明文布局与 0.15 JWT 链（zlib + chain/skin token），0.15 的玩家名 / UUID / 皮肤 / 地址全部正常还原；0.13.0（协议 37）自动补齐缺失字段
+- **封包 ID 全量重映射**：0.15.0 把全部封包 ID 从 `0x8f..0xca` 改为 `0x01..0x41`，`MultiProtocol` 按玩家协议逐个翻译出站字节；0.13 与 0.14 共用 ID 空间，仅需裁剪 3 个封包的 0.14 新增尾部字段（StartGame / ContainerOpen / AdventureSettings）
 - **字段级布局适配**：`UpdateBlockPacket`/`SetEntityMotionPacket` 去掉 0.15 已移除的数量前缀；`MoveEntityPacket` 拆分为单实体+字节旋转；`AddEntityPacket` 旋转 ×0.71111 缩放 + 附加 modifiers；`ChangeDimensionPacket` 补 xyz；`RemovePlayerPacket` 映射为 `RemoveEntityPacket`
-- **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15 用 `0xfe` 前缀，出站按玩家协议分别封装
-- **批量包按协议分组**：广播/批量压缩流按 0.14/0.15 分组各压一份，互不串包
-- **区块缓存按协议分组**：同一区块的压缩批包按 0.14/0.15 各缓存一份，内存友好
-- MOTD 保持 0.14 原生公告（协议 70），0.15 客户端直接连即可（与 axe.ink 同款方案）
+- **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15 用 `0xfe` 前缀，0.13 无前缀，出站按玩家协议分别封装
+- **批量包按协议分组**：广播/批量压缩流按 0.13/0.14/0.15 三条线路各压一份，互不串包；入站批量包按玩家协议解析（真实 0.13 客户端会把登录包塞进 BatchPacket，已兼容）
+- **区块缓存按协议分组**：同一区块的压缩批包按线路各缓存一份，内存友好
+- **0.13 创造栏白名单过滤**：创造物品栏严格按 0.13 官方创造清单（245 个 id，提取自 Genisys 0.13 `initCreativeItems`）下发，0.14 新增物品（地图、漏斗、侦测器等）一律不下发 —— 否则 0.13 客户端在**新号加载地形 / 生存模式打开背包**时会直接闪退
+- **0.13 创造取物快速路径**：0.13 创造模式取物走 `ContainerSetSlotPacket` 直改背包（与 Genisys 0.13 行为一致），绕开交易组校验（交易组会拒绝 `source=air` 的创造取物导致拿不出东西）
+- MOTD 保持 0.14 原生公告（协议 70），0.13/0.15 客户端直接连即可（与 axe.ink 同款方案）
+
+> 注：0.13.0（协议 37）因客户端登录包缺字段会被判为无效皮肤（与原版 Genisys 0.13 行为一致），请使用 **0.13.1 / 0.13.2**。
 
 ### 🚀 深度性能优化（磁盘 I/O · 内存 · CPU · 事件）
 

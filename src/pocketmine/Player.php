@@ -1379,7 +1379,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		}else{
 			$pk = new ContainerSetContentPacket();
 			$pk->windowid = ContainerSetContentPacket::SPECIAL_CREATIVE;
-			$pk->slots = array_merge(Item::getCreativeItems(), $this->personalCreativeItems);
+			$pk->slots = $this->getCreativeItemsForClient();
 			$this->dataPacket($pk);
 		}
 
@@ -2287,6 +2287,22 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		return $this->personalCreativeItems;
 	}
 
+	/**
+	 * 获取发送给当前客户端的创造背包内容(0.13 客户端自动过滤其不认识的物品)。
+	 *
+	 * @return Item[]
+	 */
+	private function getCreativeItemsForClient() : array{
+		$items = array_merge(Item::getCreativeItems(), $this->personalCreativeItems);
+		if(MultiProtocol::isOldProtocol($this->protocol)){
+			//0.13: 只发白名单内物品(精确匹配 0.13 官方创造栏), 杜绝任何 0.13 不认识的内容
+			$items = array_values(array_filter($items, function($item){
+				return MultiProtocol::isOldProtocolCreativeItem($item->getId());
+			}));
+		}
+		return $items;
+	}
+
 	public function addCreativeItem(Item $item){
 		$this->personalCreativeItems[] = Item::get($item->getId(), $item->getDamage());
 	}
@@ -2499,7 +2515,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		}else{
 			$pk = new ContainerSetContentPacket();
 			$pk->windowid = ContainerSetContentPacket::SPECIAL_CREATIVE;
-			$pk->slots = array_merge(Item::getCreativeItems(), $this->personalCreativeItems);
+			$pk->slots = $this->getCreativeItemsForClient();
 			$this->dataPacket($pk);
 		}
 		$this->forceMovement = $this->teleportPosition = $this->getPosition();
@@ -3837,12 +3853,17 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					if($packet->slot >= $this->inventory->getSize()){
 						break;
 					}
-					/*if($this->isCreative()){
+					//0.13 clients send creative-menu picks as a plain inventory slot
+					//update. The transaction group can never accept them (nothing is
+					//taken from an empty slot), so creative picks are handled directly
+					//for old-protocol clients (same as Genisys 0.13 did).
+					if(MultiProtocol::isOldProtocol($this->protocol) and $this->isCreative()){
 						if(Item::getCreativeItemIndex($packet->item) !== -1){
 							$this->inventory->setItem($packet->slot, $packet->item);
 							$this->inventory->setHotbarSlotIndex($packet->slot, $packet->slot); //links $hotbar[$packet->slot] to $slots[$packet->slot]
 						}
-					}*/
+						break;
+					}
 					$transaction = new BaseTransaction($this->inventory, $packet->slot, $this->inventory->getItem($packet->slot), $packet->item);
 				}elseif($packet->windowid === ContainerSetContentPacket::SPECIAL_ARMOR){ //Our armor
 					if($packet->slot >= 4){

@@ -56,6 +56,15 @@ class LoginPacket extends DataPacket{
 		$this->username = $this->getString();
 		$this->protocol1 = $this->getInt();
 		$this->protocol2 = $this->getInt();
+		if($this->protocol1 < 38){ //0.13.0 (protocol 37) sent no clientId/uuid/skin: fill safe placeholders
+			$this->clientId = 0;
+			$this->clientUUID = UUID::fromRandom();
+			$this->serverAddress = "";
+			$this->clientSecret = "";
+			$this->skinName = null;
+			$this->skin = "";
+			return;
+		}
 		$this->clientId = $this->getLong();
 		$this->clientUUID = $this->getUUID();
 		$this->serverAddress = $this->getString();

@@ -239,9 +239,10 @@ class Network {
 			return; //corrupt zlib stream, just drop it
 		}
 		//0.15.x clients send batch inner items as [pid][payload] with the new ids;
-		//0.14.x sends [0x8e][pid][payload]. Resolve per player protocol.
+		//0.14.x sends [0x8e][pid][payload]; 0.13.x sends bare [pid][payload] with 0.14 ids.
 		$newProto = MultiProtocol::isNewProtocol($p->getProtocol());
-		$minInner = $newProto ? 1 : 2;
+		$oldProto = MultiProtocol::isOldProtocol($p->getProtocol());
+		$minInner = ($newProto or $oldProto) ? 1 : 2;
 		$len = strlen($str);
 		$offset = 0;
 		try {
@@ -266,15 +267,26 @@ class Network {
 				if($newProto){
 					$pid = MultiProtocol::toServerPid(ord($buf[0]));
 					$bufOffset = 1;
+				}elseif($oldProto){
+					//0.13.x batch inner items are bare [pid][payload] with 0.14 ids
+					$pid = ord($buf[0]);
+					$bufOffset = 1;
 				}elseif($p->getProtocol() === null){
 					//protocol not known yet (login may ride inside this batch): detect per item
 					$pid = ord($buf[1]);
 					$bufOffset = 2;
 					if($this->getPacket($pid) === null){
-						$mapped = MultiProtocol::toServerPid(ord($buf[0]));
-						if($mapped !== null){
-							$pid = $mapped;
+						//try bare [pid][payload] with native ids (0.13 clients batch the
+						//login this way), then the 0.15 id map
+						$pid = ord($buf[0]);
+						if($this->getPacket($pid) !== null){
 							$bufOffset = 1;
+						}else{
+							$mapped = MultiProtocol::toServerPid($pid);
+							if($mapped !== null){
+								$pid = $mapped;
+								$bufOffset = 1;
+							}
 						}
 					}
 				}else{

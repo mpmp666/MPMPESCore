@@ -55,6 +55,7 @@ use pocketmine\event\Timings;
 use pocketmine\event\TimingsHandler;
 use pocketmine\event\TranslationContainer;
 use pocketmine\inventory\CraftingManager;
+use pocketmine\inventory\FurnaceRecipe;
 use pocketmine\inventory\InventoryType;
 use pocketmine\inventory\Recipe;
 use pocketmine\inventory\ShapedRecipe;
@@ -402,6 +403,9 @@ class Server{
 
 	/** @var CraftingDataPacket */
 	private $recipeList = null;
+
+	/** @var CraftingDataPacket 0.13 客户端用的过滤版配方表(去掉 0.14 新增物品的配方) */
+	private $recipeListOld = null;
 
 	/** @var Synapse */
 	private $synapse = null;
@@ -2304,12 +2308,16 @@ private function lookupAddress($address) {
 	public static function broadcastPacket(array $players, DataPacket $packet){
 		$packet->encode();
 		$packet->isEncoded = true;
-		//split recipients by wire protocol: each group needs its own translated bytes
-		$groups = [[], []];
+		//split recipients by wire family (0.13 bare / 0.14 0x8e / 0.15 0xfe):
+		//each group needs its own translated bytes
+		$groups = [[], [], []];
 		foreach($players as $player){
-			$groups[MultiProtocol::isNewProtocol($player->getProtocol()) ? 1 : 0][] = $player;
+			$groups[MultiProtocol::wireFamily($player->getProtocol())][] = $player;
 		}
 		foreach($groups as $groupPlayers){
+			if(count($groupPlayers) === 0){
+				continue;
+			}
 			if(Network::$BATCH_THRESHOLD >= 0 and strlen($packet->buffer) >= Network::$BATCH_THRESHOLD){
 				Server::getInstance()->batchPackets($groupPlayers, [$packet], false);
 			}else{
@@ -2324,6 +2332,9 @@ private function lookupAddress($address) {
 		if(isset($packet->__encapsulatedPacket81)){
 			unset($packet->__encapsulatedPacket81);
 		}
+		if(isset($packet->__encapsulatedPacket13)){
+			unset($packet->__encapsulatedPacket13);
+		}
 	}
 
 	/**
@@ -2336,30 +2347,22 @@ private function lookupAddress($address) {
 	public function batchPackets(array $players, array $packets, $forceSync = false){
 		Timings::$playerNetworkTimer->startTiming();
 
-		//group targets by wire protocol: 0.14 clients get native bytes,
-		//0.15 clients get id-remapped + layout-adjusted bytes
-		$groups = [[], []];
+		//group targets by wire family: each group gets its own translated payload
+		//(0.13 tail fields trimmed / 0.15 ids remapped / 0.14 native)
+		$groups = [[], [], []];
 		foreach($players as $p){
 			if($p->isConnected()){
-				$groups[MultiProtocol::isNewProtocol($p->getProtocol()) ? 1 : 0][] = $this->identifiers[spl_object_hash($p)];
+				$groups[MultiProtocol::wireFamily($p->getProtocol())][] = $this->identifiers[spl_object_hash($p)];
 			}
 		}
 
-		foreach([0, 1] as $newProto){
-			if(count($groups[$newProto]) === 0){
+		foreach($groups as $family => $targets){
+			if(count($targets) === 0){
 				continue;
 			}
 			$str = "";
 			foreach($packets as $p){
-				if($p instanceof DataPacket){
-					if(!$p->isEncoded){
-						$p->encode();
-					}
-					$buffers = $newProto ? MultiProtocol::translateOutgoing($p) : [$p->buffer];
-				}else{
-					$buffers = $newProto ? MultiProtocol::translateOutgoing($p) : [$p];
-				}
-				foreach($buffers as $b){
+				foreach(MultiProtocol::translateForFamily($family, $p) as $b){
 					$str .= Binary::writeInt(strlen($b)) . $b;
 				}
 			}
@@ -2368,14 +2371,14 @@ private function lookupAddress($address) {
 			}
 
 			if(!$forceSync and $this->networkCompressionAsync){
-				$task = new CompressBatchedTask($str, $groups[$newProto], $this->networkCompressionLevel);
+				$task = new CompressBatchedTask($str, $targets, $this->networkCompressionLevel);
 				$this->getScheduler()->scheduleAsyncTask($task);
 			}else{
 				$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, $this->networkCompressionLevel);
 				if($compressed === false){
 					$compressed = @zlib_encode($str, ZLIB_ENCODING_DEFLATE, 1);
 				}
-				$this->broadcastPacketsCallback($compressed, $groups[$newProto]);
+				$this->broadcastPacketsCallback($compressed, $targets);
 			}
 		}
 
@@ -2842,26 +2845,76 @@ private function lookupAddress($address) {
 		$pk = new CraftingDataPacket();
 		$pk->cleanRecipes = true;
 
+		//0.13 clients crash on recipes that reference 0.14-only items (the craftable
+		//tab is processed when a survival player opens the inventory)
+		$pkOld = new CraftingDataPacket();
+		$pkOld->cleanRecipes = true;
+
 		foreach($this->getCraftingManager()->getRecipes() as $recipe){
 			if($recipe instanceof ShapedRecipe){
 				$pk->addShapedRecipe($recipe);
+				if(self::recipeCompatibleWithOldProtocol($recipe)){
+					$pkOld->addShapedRecipe($recipe);
+				}
 			}elseif($recipe instanceof ShapelessRecipe){
 				$pk->addShapelessRecipe($recipe);
+				if(self::recipeCompatibleWithOldProtocol($recipe)){
+					$pkOld->addShapelessRecipe($recipe);
+				}
 			}
 		}
 
 		foreach($this->getCraftingManager()->getFurnaceRecipes() as $recipe){
 			$pk->addFurnaceRecipe($recipe);
+			if(self::recipeCompatibleWithOldProtocol($recipe)){
+				$pkOld->addFurnaceRecipe($recipe);
+			}
 		}
 
 		$pk->encode();
 		$pk->isEncoded = true;
-
 		$this->recipeList = $pk;
+
+		$pkOld->encode();
+		$pkOld->isEncoded = true;
+		$this->recipeListOld = $pkOld;
+	}
+
+	/**
+	 * 配方是否兼容 0.13 客户端(产物和所有配料都是 0.13 认识的物品)
+	 *
+	 * @param \pocketmine\inventory\Recipe $recipe
+	 *
+	 * @return bool
+	 */
+	private static function recipeCompatibleWithOldProtocol($recipe){
+		if(MultiProtocol::isUnknownToOldProtocol($recipe->getResult()->getId())){
+			return false;
+		}
+		if($recipe instanceof FurnaceRecipe){
+			return !MultiProtocol::isUnknownToOldProtocol($recipe->getInput()->getId());
+		}
+		if($recipe instanceof ShapedRecipe){
+			foreach($recipe->getIngredientMap() as $row){
+				foreach($row as $item){
+					if(MultiProtocol::isUnknownToOldProtocol($item->getId())){
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+		//ShapelessRecipe
+		foreach($recipe->getIngredientList() as $item){
+			if(MultiProtocol::isUnknownToOldProtocol($item->getId())){
+				return false;
+			}
+		}
+		return true;
 	}
 
 	public function sendRecipeList(Player $p){
-		$p->dataPacket($this->recipeList);
+		$p->dataPacket(MultiProtocol::isOldProtocol($p->getProtocol()) ? $this->recipeListOld : $this->recipeList);
 	}
 
 	private function checkTickUpdates($currentTick, $tickTime){

@@ -28,6 +28,34 @@ class MultiProtocol{
 	/** First protocol version of the 0.15.x family */
 	const PROTOCOL_0_15 = 81;
 
+	/** 0.13 客户端不认识的 0.14 新增物品/方块 id(出现在创造背包/配方里会让 0.13 崩溃) */
+	public static $oldProtocolUnknownItems = [23, 125, 154, 165, 179, 180, 182, 356, 380, 389, 395, 461, 462];
+
+	/** 0.13 官方创造栏白名单(从 Genisys 0.13 initCreativeItems 提取, 精确匹配 0.13 客户端) */
+	public static $oldProtocolCreativeItems = [1,2,3,4,5,6,7,12,13,14,15,16,17,18,19,20,21,22,24,25,27,28,30,31,32,35,37,38,39,40,41,42,44,45,46,47,48,49,50,52,53,54,56,57,58,61,65,66,67,69,70,72,73,76,77,78,79,80,81,82,85,86,87,88,89,91,96,98,99,100,101,102,103,106,107,108,109,110,111,112,113,114,116,120,121,123,126,128,129,131,133,134,135,136,139,143,145,146,147,148,151,152,153,155,156,158,159,161,162,163,164,167,170,171,172,173,174,175,183,184,185,186,187,243,245,256,257,258,259,260,261,262,263,264,265,266,267,268,269,270,271,272,273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,292,293,294,295,296,297,318,319,320,321,322,323,324,325,328,330,331,332,333,334,337,338,339,341,345,346,347,348,349,350,351,352,353,354,355,357,359,360,361,362,363,364,365,366,367,369,370,371,372,373,374,375,376,377,378,379,382,383,384,388,390,391,392,393,394,396,397,400,406,411,412,413,414,415,427,428,429,430,431,438,458,460,463,466];
+
+	/**
+	 * 该物品 id 是否是 0.13 客户端不认识的 0.14 新增物品
+	 *
+	 * @param int $itemId
+	 *
+	 * @return bool
+	 */
+	public static function isUnknownToOldProtocol($itemId){
+		return in_array($itemId, self::$oldProtocolUnknownItems, true);
+	}
+
+	/**
+	 * 该物品 id 是否在 0.13 官方创造栏中
+	 *
+	 * @param int $itemId
+	 *
+	 * @return bool
+	 */
+	public static function isOldProtocolCreativeItem($itemId){
+		return in_array($itemId, self::$oldProtocolCreativeItems, true);
+	}
+
 	/** 0.14 (protocol 70) packet id => 0.15 (protocol 81) packet id */
 	private static $toClient = [
 		0x8f => 0x01, //LOGIN
@@ -93,10 +121,37 @@ class MultiProtocol{
 	/** 0.15 packet id => 0.14 packet id (inverse of $toClient) */
 	private static $toServer = null;
 
+	/** First/last protocol version of the 0.13.x family (0.13.0=37, 0.13.1=38, 0.13.2=39) */
+	const PROTOCOL_0_13 = 37;
+	const PROTOCOL_0_13_LAST = 39;
+
 	private static function init(){
 		if(self::$toServer === null){
 			self::$toServer = array_flip(self::$toClient);
 		}
+	}
+
+	/**
+	 * Wire family of a client protocol:
+	 *   0 = 0.14.x (native: 0x8e encapsulation, current field layouts)
+	 *   1 = 0.15.x (0xfe encapsulation, renumbered ids, adjusted fields)
+	 *   2 = 0.13.x (no encapsulation marker, three packets lack the 0.14 tail fields)
+	 *
+	 * @param int|null $protocol
+	 *
+	 * @return int
+	 */
+	public static function wireFamily($protocol){
+		if($protocol === null){
+			return 0;
+		}
+		if($protocol >= self::PROTOCOL_0_15){
+			return 1;
+		}
+		if($protocol >= self::PROTOCOL_0_13 and $protocol <= self::PROTOCOL_0_13_LAST){
+			return 2;
+		}
+		return 0;
 	}
 
 	/**
@@ -108,6 +163,17 @@ class MultiProtocol{
 	 */
 	public static function isNewProtocol($protocol){
 		return $protocol !== null and $protocol >= self::PROTOCOL_0_15;
+	}
+
+	/**
+	 * Whether the given client protocol belongs to the 0.13.x family
+	 *
+	 * @param int|null $protocol
+	 *
+	 * @return bool
+	 */
+	public static function isOldProtocol($protocol){
+		return $protocol !== null and $protocol >= self::PROTOCOL_0_13 and $protocol <= self::PROTOCOL_0_13_LAST;
 	}
 
 	/**
@@ -132,6 +198,59 @@ class MultiProtocol{
 	public static function toServerPid($pid){
 		self::init();
 		return isset(self::$toServer[$pid]) ? self::$toServer[$pid] : null;
+	}
+
+	/**
+	 * Translates an encoded packet for the given wire family (see wireFamily()).
+	 *
+	 * @param int              $family
+	 * @param DataPacket|string $packet
+	 *
+	 * @return string[]
+	 */
+	public static function translateForFamily($family, $packet){
+		if($family === 1){
+			return self::translateOutgoing($packet);
+		}
+		if($family === 2){
+			return self::translateOutgoingOld($packet);
+		}
+		if($packet instanceof DataPacket){
+			if(!$packet->isEncoded){
+				$packet->encode();
+			}
+			return [$packet->buffer];
+		}
+		return [$packet];
+	}
+
+	/**
+	 * RakNet encapsulation marker for a wire family:
+	 * 0.14.x = 0x8e, 0.15.x = 0xfe, 0.13.x = no marker at all.
+	 *
+	 * @param int $family
+	 *
+	 * @return string
+	 */
+	public static function encapPrefixForFamily($family){
+		if($family === 1){
+			return "\xfe";
+		}
+		return $family === 2 ? "" : "\x8e";
+	}
+
+	/**
+	 * Per-family encapsulation cache property on a pre-encoded packet object.
+	 *
+	 * @param int $family
+	 *
+	 * @return string
+	 */
+	public static function cachePropForFamily($family){
+		if($family === 1){
+			return "__encapsulatedPacket81";
+		}
+		return $family === 2 ? "__encapsulatedPacket13" : "__encapsulatedPacket";
 	}
 
 	/**
@@ -225,6 +344,53 @@ class MultiProtocol{
 					return []; //no 0.15 counterpart: drop silently
 				}
 				return [chr($mapped) . substr($buf, 1)];
+		}
+	}
+
+	/**
+	 * Translates an encoded 0.14-native packet buffer for a 0.13.x client.
+	 *
+	 * 0.13.0-0.13.2 share the 0.14 packet id space and the 0.14 field layouts
+	 * except three packets that gained tail fields in 0.14:
+	 *   StartGamePacket       0.14: ...[1][1][0][string]  -> 0.13: ...[0]   (47 bytes)
+	 *   ContainerOpenPacket   0.14: ...[entityId long]     -> 0.13: 无该字段 (17 bytes)
+	 *   AdventureSettings     0.14: [flags][userPerm][globPerm] -> 0.13: [flags] (5 bytes)
+	 * 0.13 clients also use no encapsulation marker at all (see RakLibInterface).
+	 *
+	 * @param DataPacket|string $packet encoded DataPacket or raw encoded buffer
+	 *
+	 * @return string[]
+	 */
+	public static function translateOutgoingOld($packet){
+		if($packet instanceof DataPacket){
+			if(!$packet->isEncoded){
+				$packet->encode();
+			}
+			$buf = $packet->buffer;
+			if(strlen($buf) > 0 and ord($buf[0]) !== $packet::NETWORK_ID){
+				return [$buf]; //already translated for another family
+			}
+		}else{
+			$buf = $packet;
+		}
+
+		$pid = strlen($buf) > 0 ? ord($buf[0]) : -1;
+		switch($pid){
+			case Info::START_GAME_PACKET:
+				//pid(1)+45 field bytes, then 0.14 has [1][1][0][string], 0.13 has [0]:
+				//keep the 46 header bytes and append the shared trailing 0 byte
+				return [strlen($buf) >= 47 ? substr($buf, 0, 46) . "\x00" : $buf];
+
+			case Info::CONTAINER_OPEN_PACKET:
+				//pid(1)+windowid(1)+type(1)+slots(2)+x/y/z(12) = 17; the 0.14 entityId long is dropped
+				return [strlen($buf) >= 17 ? substr($buf, 0, 17) : $buf];
+
+			case Info::ADVENTURE_SETTINGS_PACKET:
+				//pid(1)+flags(4); the 0.14 userPermission/globalPermission ints are dropped
+				return [strlen($buf) >= 5 ? substr($buf, 0, 5) : $buf];
+
+			default:
+				return [$buf]; //identical layout, identical id
 		}
 	}
 }

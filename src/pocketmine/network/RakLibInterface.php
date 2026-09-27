@@ -213,21 +213,22 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 		if(isset($this->identifiers[$h = spl_object_hash($player)])){
 			$identifier = $this->identifiers[$h];
 			$pk = null;
-			$newProto = MultiProtocol::isNewProtocol($player->getProtocol());
+			//0.13.x = bare payload, 0.14.x = 0x8e marker, 0.15.x = 0xfe marker
+			$family = MultiProtocol::wireFamily($player->getProtocol());
+			$prefix = MultiProtocol::encapPrefixForFamily($family);
 			if(!$packet->isEncoded){
 				$packet->encode();
 			}elseif(!$needACK){
-				//encapsulation cache is per wire format: 0.14 content is 0x8e-wrapped,
-				//0.15 content is 0xfe-wrapped with translated ids/fields
-				$cacheProp = $newProto ? "__encapsulatedPacket81" : "__encapsulatedPacket";
+				//encapsulation cache is per wire family (content + marker differ)
+				$cacheProp = MultiProtocol::cachePropForFamily($family);
 				if(!isset($packet->$cacheProp)){
-					$buffers = $newProto ? MultiProtocol::translateOutgoing($packet) : [$packet->buffer];
+					$buffers = MultiProtocol::translateForFamily($family, $packet);
 					if(count($buffers) === 0){
 						return null; //packet does not exist in this client's protocol
 					}
 					$packet->$cacheProp = new CachedEncapsulatedPacket;
 					$packet->$cacheProp->identifierACK = null;
-					$packet->$cacheProp->buffer = chr($newProto ? 0xfe : 0x8e) . $buffers[0];
+					$packet->$cacheProp->buffer = $prefix . $buffers[0];
 					$packet->$cacheProp->reliability = 3;
 					$packet->$cacheProp->orderChannel = 0;
 				}
@@ -242,13 +243,13 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 			}
 
 			if($pk === null){
-				$buffers = $newProto ? MultiProtocol::translateOutgoing($packet) : [$packet->buffer];
+				$buffers = MultiProtocol::translateForFamily($family, $packet);
 				if(count($buffers) === 0){
 					return null; //packet does not exist in this client's protocol
 				}
 				foreach($buffers as $outBuffer){
 					$pk = new EncapsulatedPacket();
-					$pk->buffer = chr($newProto ? 0xfe : 0x8e) . $outBuffer;
+					$pk->buffer = $prefix . $outBuffer;
 					$packet->reliability = 3;
 					$packet->orderChannel = 0;
 
@@ -281,6 +282,23 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 			}
 			$mapped = MultiProtocol::toServerPid($pid);
 			if($mapped === null or ($data = $this->network->getPacket($mapped)) === null){
+				return null;
+			}
+			$data->setBuffer($buffer, $start);
+
+			return $data;
+		}
+
+		if(MultiProtocol::isOldProtocol($protocol)){
+			//0.13.x wire: bare [pid][payload] (no marker, same ids as 0.14);
+			//tolerate a 0x8e marker just in case
+			$pid = ord($buffer[0]);
+			$start = 1;
+			if($pid === 0x8e){
+				$pid = ord($buffer[1]);
+				$start = 2;
+			}
+			if(($data = $this->network->getPacket($pid)) === null){
 				return null;
 			}
 			$data->setBuffer($buffer, $start);
