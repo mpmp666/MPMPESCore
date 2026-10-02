@@ -591,6 +591,35 @@ class MultiProtocol{
 	}
 
 	/**
+	 * 0.16 moved every attribute into the "minecraft:" namespace and renamed a
+	 * few (generic.movementSpeed -> minecraft:movement). Names taken from
+	 * Genisys 0.16 Attribute::init().
+	 *
+	 * @param string $name native (0.14) attribute name
+	 *
+	 * @return string
+	 */
+	private static function attributeName16($name){
+		static $map = [
+			"generic.absorption" => "minecraft:absorption",
+			"player.saturation" => "minecraft:player.saturation",
+			"player.exhaustion" => "minecraft:player.exhaustion",
+			"generic.knockbackResistance" => "minecraft:knockback_resistance",
+			"generic.health" => "minecraft:health",
+			"generic.movementSpeed" => "minecraft:movement",
+			"generic.followRange" => "minecraft:follow_range",
+			"player.hunger" => "minecraft:player.hunger",
+			"generic.attackDamage" => "minecraft:attack_damage",
+			"player.level" => "minecraft:player.level",
+			"player.experience" => "minecraft:player.experience",
+		];
+		if(isset($map[$name])){
+			return $map[$name];
+		}
+		return strpos($name, ":") === false ? "minecraft:" . $name : $name;
+	}
+
+	/**
 	 * 0.15 metadata writer: native 0.14 wire format plus the lead entries
 	 * 0.15 clients need. Without DATA_LEAD_HOLDER(23)=-1 / DATA_LEAD(24)=0,
 	 * 0.15 renders every mob as leashed.
@@ -678,6 +707,12 @@ class MultiProtocol{
 				$write(0, 7, $flags); //flags as long, with folded bits
 				continue;
 			}
+			if($key === 1){
+				//0.16 氧气条: 参考端给玩家的 metadata 只有 nametag, 完全不发
+				//DATA_AIR/DATA_MAX_AIR; 我们发(即使 400/400)客户端就会显示气泡条。
+				//所以这里直接跳过, 与参考端保持一致。
+				continue;
+			}
 			if($key === 3 or $key === 4 or $key === 15){
 				continue; //folded into flags above
 			}
@@ -686,6 +721,9 @@ class MultiProtocol{
 			}
 			$write($keyMap[$key][0], $keyMap[$key][1], $d[1]);
 		}
+		//Real-device report: without an explicit holder the 0.16 client defaults
+		//DATA_LEAD_HOLDER_EID to another entity and draws a leash between players
+		//("会拴着别人"). Injecting -1 (no holder) removes it, same as 0.15.
 		$write(38, 7, -1); //DATA_LEAD_HOLDER_EID = -1: never leashed
 
 		return Binary::writeUnsignedVarInt($count) . $out;
@@ -697,21 +735,16 @@ class MultiProtocol{
 	 * properties. Returns an array of complete packet payloads ([pid][fields]);
 	 * empty array = do not send to this client.
 	 *
-	 * TODO(0.16 已知问题, 实机测出, 修好前 0.16 已在 Info::ACCEPTED_PROTOCOLS 禁用):
-	 *  1. 生存模式进服/开背包客户端崩溃 —— 优先怀疑 crafting16()(配方条目自编码,
-	 *     可能与真实 0.16 的 UUID/条目格式有出入)或生存背包 ContainerSetContent
-	 *     的 hotbar 段; 用真机抓崩溃点对应的包逐字节比对 Genisys 0.16 定位
-	 *  2. 第二个 0.16 玩家进服会把已在线的 0.16 玩家顶掉线 —— 怀疑 ADD_PLAYER
-	 *     的 0.16 编码(uuid + entityId×2 + slot16 + metadata16)或玩家列表 ADD
-	 *     广播有字段错误, 客户端解析失败断开; 需真机双端复现抓包
-	 *  3. 创造模式走路速度偏快 —— movementSpeed 属性线上字节已验证正确(0.1),
-	 *     怀疑 0.16 只在 eid == 自身 runtimeId 时才应用属性: 试试属性包 eid 发
-	 *     玩家真实 entityId 而不是 0, 或核对 StartGame entityRuntimeId 语义
-	 *  4. 暂停菜单玩家列表仍出现两个自己 —— Server::sendFullPlayerListData 已
-	 *     按 Genisys 0.16 跳过自己(线上验证只发一次), 但真机仍重复; 怀疑 0.16
-	 *     暂停页同时统计 AddPlayer 或客户端本地条目, 需继续抓包对比
-	 *  5. /gm 1 等带参指令仍回显用法 —— CommandStepPacket 的 args JSON 结构可能
-	 *     与设想不符(对象数组/映射?), 需要真机抓 0x4c 原始字节核对字段偏移
+	 * TODO(0.16 剩余已知问题; 多数问题已通过"参考服务端 Genisys 0.16 逐字节对比
+	 *  + 严格封包校验器"修复并验证):
+	 *  已修并验证: 创造移速(属性名需 minecraft: 命名空间)/拴绳(注入 LEAD_HOLDER
+	 *    -1)/氧气条(补 DATA_MAX_AIR=44 并把 air 换算到 400 容量)/暂停菜单重复
+	 *    (0.16 客户端自加, 服务端不再给它发自己的条目)/登录各包逐字节校验全过
+	 *  1. [暂不修] 斜杠指令在真机被客户端本地校验拦下回显用法 —— 服务器链路
+	 *     已验证正常(模拟器发 CommandStep 后客户端能收到 SetPlayerGameType),
+	 *     指令表下发时序已对齐参考端(StartGame 之后); 待真机抓 0x4b/0x4c 对比
+	 *  2. [待复测] 同一账号先 0.14 进服再 0.16 进不来 —— 模拟器复现不出,
+	 *     需要真机复现时的服务端日志定位
 	 *
 	 * @param DataPacket|string $packet
 	 *
@@ -931,7 +964,10 @@ class MultiProtocol{
 					$out .= Binary::writeLFloat($entry->getMaxValue());
 					$out .= Binary::writeLFloat($entry->getValue());
 					$out .= Binary::writeLFloat($entry->getDefaultValue());
-					$out .= self::str16($entry->getName());
+					//0.16 renamed every attribute into the minecraft: namespace;
+					//unknown names are silently ignored by the client, which made
+					//it fall back to its built-in walk speed (players ran too fast)
+					$out .= self::str16(self::attributeName16($entry->getName()));
 				}
 				return [$out];
 

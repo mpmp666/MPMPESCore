@@ -481,11 +481,14 @@ class Binary{
 
 	/**
 	 * Reads a zigzag-encoded signed varint32 from $str at $offset.
+	 * The shift must be 63 on 64-bit PHP (same as Genisys/upstream): using 31
+	 * silently decodes every value to the wrong number (and 0 for odd values).
 	 */
 	public static function readVarInt($str, &$offset){
 		$raw = self::readUnsignedVarInt($str, $offset);
-		$temp = ((($raw << 31) >> 31) ^ $raw) >> 1;
-		return $temp ^ ($raw & (1 << 31));
+		$shift = PHP_INT_SIZE === 8 ? 63 : 31;
+		$temp = ((($raw << $shift) >> $shift) ^ $raw) >> 1;
+		return $temp ^ ($raw & (1 << $shift));
 	}
 
 }

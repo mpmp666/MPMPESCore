@@ -21,6 +21,8 @@
 - **GLM-5.3-Flash**
 - **MiMo V2.5 Free**
 - **Kimi K3**
+- **Hy4 preview**
+- **DeepSeek V4 Flash**
 
 ## ✨ 新增功能与改进
 
@@ -59,16 +61,21 @@
 - 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
 - 指令 `/frp [status|start|restart|stop|reload] [隧道名]`（仅 OP/控制台）管理隧道：`status` 查看（含 frps 地址/远程端口/TLS/run_id），`restart`/`stop`/`start` 支持单隧道名，`reload` 免重启重扫 `frp*.toml`（新增自动启动、变更自动重启、删除自动停止）
 
-### 🔀 跨版本互通：0.13 / 0.14 / 0.15 同图同端口
+### 🔀 跨版本互通：0.13 / 0.14 / 0.15 / 0.16 同图同端口
 
-> ⚠️ **0.16（协议 90/91）翻译层已写好但暂时禁止接入**（`Info::ACCEPTED_PROTOCOLS` 未放行 90/91，连接会被提示"服务端版本过旧"）。实机测试发现 5 个未解决问题，TODO 清单写在 `network/MultiProtocol.php::translateOutgoing16()` 的注释里：生存模式进服/开背包客户端崩溃、第二个 0.16 玩家进服会顶掉已在线玩家、创造模式移速偏快、暂停菜单玩家列表重复、带参斜杠指令回显用法。修好后再放开。
+> ⚠️ **0.16（协议 90/91）已可接入，但仍有 2 个已知问题：**
+> - **0.16 生存模式在陆地上会一直显示氧气条（气泡条）**
+> - **0.16 的斜杠指令存在问题**（客户端本地校验后回显"用法"，不往服务端发包）
+>
+> 除这两条外 0.16 已实测可用：创造移速正常、生物不再被拴绳、暂停菜单不重复自己、能看见其他玩家、可与 0.14 玩家同时在线、同一账号 0.14 退出后 0.16 可正常进入。
+> 详细 TODO 写在 `network/MultiProtocol.php::translateOutgoing16()` 与 `Player.php` 的 CommandStep 分支注释里。
 
-**我们支持 0.13 到 0.15 互通。** 同一个端口同时接受 **MCPE 0.13.x**（协议 37/38/39）与 **MCPE 0.14.x**（协议 45/46/60/70）、**MCPE 0.15.x**（协议 81-83）客户端，三类玩家在同一张地图上一起玩：
+**我们支持 0.13 到 0.16 互通。** 同一个端口同时接受 **MCPE 0.13.x**（协议 37/38/39）、**MCPE 0.14.x**（协议 45/46/60/70）、**MCPE 0.15.x**（协议 81-83）与 **MCPE 0.16.x**（协议 90/91）客户端，四类玩家在同一张地图上一起玩：
 
 - **登录三格式嗅探**：`LoginPacket` 自动识别 0.13/0.14 明文布局与 0.15/0.16 JWT 链（zlib + chain/skin token；0.16 多一个 gameEdition 字节且压缩长度为 varint），玩家名 / UUID / 皮肤 / 地址全部正常还原；0.13.0（协议 37）自动补齐缺失字段
 - **封包 ID 全量重映射**：0.15.0 把全部封包 ID 从 `0x8f..0xca` 改为 `0x01..0x41`，0.16 又插入资源包握手整体偏移到 `0x01..0x4f`，`MultiProtocol` 持两张映射表按玩家协议逐个翻译
 - **0.16 全量重编码**：0.16 把基础类型全换了——字符串 varint 前缀、物品 slot 改 `varint id + varint(damage<<8|count)`、实体 ID 改 zigzag varint、坐标改 `varint x + byte y + varint z`、浮点改小端、metadata 改字典式，出站包从对象属性逐字段重编码，入站包解析回原生对象，`Player.php` 逻辑零改动
-- **0.16 资源包握手**：登录后自动补发空 `ResourcePacksInfoPacket`（我们不发资源包），并下发空 `AvailableCommandsPacket`；0.16 客户端的斜杠指令走 `CommandStepPacket`，已接入指令调度
+- **0.16 资源包握手与指令表**：登录后自动补发空 `ResourcePacksInfoPacket`（我们不发资源包）；`StartGame` 之后按参考端（Genisys 0.16）的时序下发 `AvailableCommandsPacket` 指令表（JSON 结构已与参考端逐字节一致），0.16 客户端的斜杠指令走 `CommandStepPacket`，已接入指令调度（**但有上述已知问题**）
 - **字段级布局适配**：`UpdateBlockPacket`/`SetEntityMotionPacket` 在 0.15/0.16 拆为单条记录；`MoveEntityPacket` 拆分为单实体+字节旋转；`AddEntityPacket` 旋转缩放；`ChangeDimensionPacket` 补 xyz；`RemovePlayerPacket` 映射为 `RemoveEntityPacket`；0.16 配方表 varint 重编码
 - **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15/0.16 用 `0xfe` 前缀，0.13 无前缀，出站按玩家协议分别封装
 - **批量包按协议分组**：广播/批量压缩流按 0.13/0.14/0.15/0.16 四条线路各压一份（0.16 内层帧为 varint 长度），互不串包；入站批量包按玩家协议解析（真实 0.13 客户端会把登录包塞进 BatchPacket，已兼容）
@@ -79,6 +86,8 @@
 - **MOTD 保持 0.14 原生公告**（协议 70），0.13/0.15 客户端直接连即可（与 axe.ink 同款方案）
 
 > 注：0.13.0（协议 37）因客户端登录包缺字段会被判为无效皮肤（与原版 Genisys 0.13 行为一致），请使用 **0.13.1 / 0.13.2**。0.16 暂不支持地图物品数据包（MPApi 地图功能对 0.16 客户端自动降级为不发送）。
+>
+> 0.16 剩余问题追踪：**① 生存模式陆地上的氧气条** —— 参考端（Genisys 0.16）给玩家的 metadata 只发 nametag、完全不发 `DATA_AIR`/`DATA_MAX_AIR`，我们已同样跳过，但真机仍显示，待进一步定位；**② 指令** —— 服务器链路正常（模拟器发 CommandStep 后客户端能收到 `SetPlayerGameType`）、指令表 JSON 已与参考端一致，真机仍被客户端本地拦截，待真机抓 `0x4b`/`0x4c` 原始字节继续排查。
 
 ### 🚀 深度性能优化（磁盘 I/O · 内存 · CPU · 事件）
 

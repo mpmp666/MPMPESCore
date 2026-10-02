@@ -1398,11 +1398,13 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$data = new \stdClass();
 		$count = 0;
 		foreach($this->server->getCommandMap()->getCommands() as $command){
+			//字段顺序严格照参考端(Genisys 0.16)来: aliases -> description -> overloads
+			//-> permission -> pocketminePermission。真机上顺序不对客户端会本地校验失败
+			//直接回显用法, 所以不要重排。
 			$version = new \stdClass();
 			$version->aliases = array_values($command->getAliases());
 			$desc = $command->getDescription();
 			$version->description = ($desc === null or $desc === "") ? $command->getName() : $desc;
-			$version->permission = "any";
 
 			$param = new \stdClass();
 			$param->name = "args";
@@ -1415,6 +1417,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$version->overloads = new \stdClass();
 			$version->overloads->default = $overload;
 
+			$version->permission = "any";
+			$version->pocketminePermission = $command->getPermission() ?? ("pocketmine.command." . $command->getName());
+
 			$name = $command->getName();
 			$data->$name = new \stdClass();
 			$data->$name->versions = [$version];
@@ -1426,6 +1431,34 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$pk = new \pocketmine\network\protocol\AvailableCommandsPacket();
 		$pk->commands = json_encode($data);
 		$this->dataPacket($pk);
+	}
+
+	/**
+	 * Flattens the args structure of a 0.16 CommandStepPacket into plain string
+	 * values. Client builds send different shapes; an entry carrying an explicit
+	 * "value"/"text" key contributes only that value, everything else recurses.
+	 *
+	 * @param array $args
+	 * @param array $out
+	 */
+	private static function flattenCommandArgs(array $args, array &$out){
+		foreach($args as $arg){
+			if(is_array($arg)){
+				if(isset($arg["value"]) and is_scalar($arg["value"])){
+					$out[] = $arg["value"];
+					continue;
+				}
+				if(isset($arg["text"]) and is_scalar($arg["text"])){
+					$out[] = $arg["text"];
+					continue;
+				}
+				self::flattenCommandArgs($arg, $out);
+				continue;
+			}
+			if(is_scalar($arg)){
+				$out[] = $arg;
+			}
+		}
 	}
 
 	/**
@@ -2496,14 +2529,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$this->dataPacket($pk);
 
 		if(MultiProtocol::is016Protocol($this->protocol)){
-			//TODO(0.16 已禁用, 见 Info::ACCEPTED_PROTOCOLS): 以下 0.16 握手逻辑保留备用
 			//0.16 clients wait for the resource-pack handshake before StartGame;
 			//an empty list tells them there is nothing to download.
 			$this->dataPacket(new \pocketmine\network\protocol\ResourcePacksInfoPacket());
-			//0.16 validates slash commands CLIENT-SIDE against this list — an
-			//empty one makes the client reject every command as "not found"
-			//without ever sending it to the server.
-			$this->sendCommandData16();
 		}
 
 		if($this->spawnPosition === null and isset($this->namedtag->SpawnLevel) and ($level = $this->server->getLevelByName($this->namedtag["SpawnLevel"])) instanceof Level){
@@ -2568,6 +2596,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$pk->windowid = ContainerSetContentPacket::SPECIAL_CREATIVE;
 			$pk->slots = $this->getCreativeItemsForClient();
 			$this->dataPacket($pk);
+		}
+		if(MultiProtocol::is016Protocol($this->protocol)){
+			//0.16 客户端只在 StartGame 之后才接受指令表(在 StartGame 前下发会被
+			//丢弃, 之后斜杠指令全部被客户端本地校验拦下直接回显用法)。参考端
+			//(Genisys 0.16) 也是在登录流程末尾才 sendCommandData。
+			$this->sendCommandData16();
 		}
 		$this->forceMovement = $this->teleportPosition = $this->getPosition();
 	}
@@ -2663,8 +2697,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				}
 
 				//0.14.x = 45/46/60/70; 0.15.x 及之后 JWT 登录族按 0.15 线路接入
-				//(0.16 = 90/91 已暂时禁止接入, 见 Info::ACCEPTED_PROTOCOLS 注释)
-				if(!in_array($packet->protocol1, ProtocolInfo::ACCEPTED_PROTOCOLS) and !($packet->protocol1 >= 81 and $packet->protocol1 <= 89)){
+				//(0.16 = 90/91: family 3 翻译, 修复验证期间临时放行)
+				if(!in_array($packet->protocol1, ProtocolInfo::ACCEPTED_PROTOCOLS) and !($packet->protocol1 >= 81 and $packet->protocol1 <= 99)){
 					if($packet->protocol1 < ProtocolInfo::CURRENT_PROTOCOL){
 						$message = "disconnectionScreen.outdatedClient";
 
@@ -3645,24 +3679,24 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				$this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, false);
 				break;
 			case \pocketmine\network\protocol\CommandStepPacket::NETWORK_ID: //0.16 clients run slash commands through this
-				//TODO(0.16 已知问题 #5): /gm 1 仍回显用法, args 展平未生效 —— 需要真机
-				//抓 0x4c 原始包核对 decodeIncoming16() 的字段偏移(command/overload/
-				//uvarint×2/bool/uvarint64/args json)与 args JSON 真实结构
+				//TODO(0.16 已知 BUG): 真机上 0.16 客户端仍在本地校验指令后回显用法,
+				//不往服务端发包。服务器链路本身正常(模拟器发 CommandStep 后客户端
+				//能收到 SetPlayerGameType), 指令表 JSON 已与参考端(Genisys 0.16)
+				//逐字节一致(键顺序/permission/pocketminePermission/下发时序),
+				//但真机依旧报错 —— 需要真机抓 0x4b/0x4c 原始字节继续定位。
 				if($this->spawned === false or !$this->isAlive()){
 					break;
 				}
 				$this->craftingType = 0;
 				$commandText = $packet->command;
-				//0.16 sends args as a JSON array of {"name","type","value"} objects
-				//(or a plain map): flatten to plain values before rebuilding the line
-				if(is_array($packet->args)){
-					foreach($packet->args as $arg){
-						if(is_array($arg)){
-							$arg = isset($arg["value"]) ? $arg["value"] : (isset($arg["text"]) ? $arg["text"] : reset($arg));
-						}
-						if(!is_scalar($arg)){
-							continue;
-						}
+				//0.16 sends the arguments as JSON. Depending on the client build this
+				//is a plain map ({"args":"1"}), an array of strings, or an array of
+				//{"name","type","value"} objects. Flatten recursively, preferring an
+				//explicit "value"/"text" key, so every shape yields the plain values.
+				if($packet->args !== null and is_array($packet->args) and strpos($commandText, " ") === false){
+					$flat = [];
+					self::flattenCommandArgs($packet->args, $flat);
+					foreach($flat as $arg){
 						$commandText .= " " . $arg;
 					}
 				}

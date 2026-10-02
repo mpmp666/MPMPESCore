@@ -2824,7 +2824,15 @@ private function lookupAddress($address) {
 		$pk = new PlayerListPacket();
 		$pk->type = PlayerListPacket::TYPE_ADD;
 		$pk->entries[] = [$uuid, $entityId, $name, $skinName, $skinData];
-		Server::broadcastPacket($players === null ? $this->playerList : $players, $pk);
+		$recipients = $players === null ? $this->playerList : $players;
+		//0.16 clients add themselves to the pause-menu player list on login; sending
+		//their own entry too makes them appear twice. 0.14/0.15 need the entry.
+		$recipients = array_filter($recipients, function($p) use ($uuid){
+			return !(MultiProtocol::is016Protocol($p->getProtocol()) and $p->getUniqueId() !== null and $p->getUniqueId()->equals($uuid));
+		});
+		if(count($recipients) > 0){
+			Server::broadcastPacket($recipients, $pk);
+		}
 	}
 
 	public function removePlayerListData(UUID $uuid, ?array $players = null){
