@@ -2360,7 +2360,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	}
 
 	/**
-	 * 获取发送给当前客户端的创造背包内容(0.13 客户端自动过滤其不认识的物品)。
+	 * 获取发送给当前客户端的创造背包内容(0.12/0.13 客户端自动过滤其不认识的物品)。
 	 *
 	 * @return Item[]
 	 */
@@ -2370,6 +2370,11 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			//0.13: 只发白名单内物品(精确匹配 0.13 官方创造栏), 杜绝任何 0.13 不认识的内容
 			$items = array_values(array_filter($items, function($item){
 				return MultiProtocol::isOldProtocolCreativeItem($item->getId());
+			}));
+		}elseif(MultiProtocol::is012Protocol($this->protocol)){
+			//0.12: 按 0.12 自己的创造清单过滤(0.12 认识的物品比 0.13 还少)
+			$items = array_values(array_filter($items, function($item){
+				return MultiProtocol::is012ProtocolCreativeItem($item->getId());
 			}));
 		}
 		return $items;

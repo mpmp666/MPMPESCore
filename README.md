@@ -1,6 +1,6 @@
 # MPMPESCore
 
-**MPMPESCore** 是一个修改版的 Minecraft: 基岩版（MCPE）服务端核心，由 mpmpes 基于 **Genisys** 构建。**已实现 0.13 / 0.14 / 0.15 / 0.16 四版本同服互通。**
+**MPMPESCore** 是一个修改版的 Minecraft: 基岩版（MCPE）服务端核心，由 mpmpes 基于 **Genisys** 构建。**已实现 0.12 / 0.13 / 0.14 / 0.15 / 0.16 五版本同服互通。**
 
 - 核心名称：`MPMPESCore`
 - 版本：`1.1`
@@ -50,7 +50,7 @@
 - **地图媒体 API**：`createDynamicMap()` / `setMapImageFromFile()` / `getMapItem()` —— 支持 **Bad Apple 视频播放**、**图片展示**、**物品展示框渲染**（动态地图 ID 从 20000 起，不落盘，重登需补发）
 - **frp 隧道 API**：`isFrpEnabled()` / `getFrpTunnels()` / `restartFrp()` / `stopFrp()`，1.1 新增单隧道控制 `restartFrpTunnel($name)` / `stopFrpTunnel($name)` / `startFrpTunnel($name)` 与免重启重扫配置 `reloadFrpTunnels()`
 - **玩家真实地址**：`getPlayerAddress()` / `getPlayerPort()` / `getPlayerEntryAddress()` —— 经 PROXY v2 还原
-- **玩家协议版本**（1.1 新增）：`getPlayerProtocol()` —— 0.13.x=37/38/39、0.14.x=45/46/60/70、0.15.x=81+；`isNewProtocolPlayer()` —— 是否 0.15 新版线路格式
+- **玩家协议版本**（1.1 新增）：`getPlayerProtocol()` —— 0.12.x=34、0.13.x=37/38/39、0.14.x=45/46/60/70、0.15.x=81+；`isNewProtocolPlayer()` —— 是否 0.15 新版线路格式
 
 > 插件在 `plugin.yml` 声明 `mpapi: "1.1"` 即可使用；版本高于服务端的插件会被自动禁用。
 
@@ -61,7 +61,7 @@
 - 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
 - 指令 `/frp [status|start|restart|stop|reload] [隧道名]`（仅 OP/控制台）管理隧道：`status` 查看（含 frps 地址/远程端口/TLS/run_id），`restart`/`stop`/`start` 支持单隧道名，`reload` 免重启重扫 `frp*.toml`（新增自动启动、变更自动重启、删除自动停止）
 
-### 🔀 跨版本互通：0.13 / 0.14 / 0.15 / 0.16 同图同端口
+### 🔀 跨版本互通：0.12 / 0.13 / 0.14 / 0.15 / 0.16 同图同端口
 
 > ⚠️ **0.16（协议 90/91）已可接入，但仍有 2 个已知问题：**
 > - **0.16 生存模式在陆地上会一直显示氧气条（气泡条）**
@@ -70,24 +70,32 @@
 > 除这两条外 0.16 已实测可用：创造移速正常、生物不再被拴绳、暂停菜单不重复自己、能看见其他玩家、可与 0.14 玩家同时在线、同一账号 0.14 退出后 0.16 可正常进入。
 > 详细 TODO 写在 `network/MultiProtocol.php::translateOutgoing16()` 与 `Player.php` 的 CommandStep 分支注释里。
 
-**我们支持 0.13 到 0.16 互通。** 同一个端口同时接受 **MCPE 0.13.x**（协议 37/38/39）、**MCPE 0.14.x**（协议 45/46/60/70）、**MCPE 0.15.x**（协议 81-83）与 **MCPE 0.16.x**（协议 90/91）客户端，四类玩家在同一张地图上一起玩：
+**我们支持 0.12 到 0.16 互通。** 同一个端口同时接受 **MCPE 0.12.x**（协议 34）、**MCPE 0.13.x**（协议 37/38/39）、**MCPE 0.14.x**（协议 45/46/60/70）、**MCPE 0.15.x**（协议 81-83）与 **MCPE 0.16.x**（协议 90/91）客户端，五类玩家在同一张地图上一起玩：
 
-- **登录三格式嗅探**：`LoginPacket` 自动识别 0.13/0.14 明文布局与 0.15/0.16 JWT 链（zlib + chain/skin token；0.16 多一个 gameEdition 字节且压缩长度为 varint），玩家名 / UUID / 皮肤 / 地址全部正常还原；0.13.0（协议 37）自动补齐缺失字段
+- **0.12 支持（协议 34，已真机实测可用）**：0.12 与 0.13 共用同一套封包 ID（`0x8f..0xca`）与全部基元（`putSlot`/`putString`/`putUUID`/`writeMetadata` 逐字节一致），所以 0.12 只需处理 4 处差异，其余 50+ 个包零修改直通：
+  - `ContainerSetSlotPacket` 没有 0.14/0.13 插在 slot 与 item 之间的 `hotbarSlot(short)`（入站按 0.12 布局重解析、出站剥离该字段）
+  - `ChangeDimensionPacket` 写 4 字节 `int dimensionId`（0.14/0.13 写 `byte dim + byte 0`）
+  - `PlayerListPacket` TYPE_ADD 条目用 1 字节 `slim` 标志代替 0.14 的 `skinName` 字符串
+  - `CraftingDataPacket` 的 shaped 配方材料槽遍历顺序为 `(z<height, x<width)`（0.14/0.13 是 `(z<width, x<height)`，只影响非方形配方）
+- **0.12 创造栏白名单**：创造物品栏按 0.12 自己的清单（236 个 id，提取自 Prismarine-0.12 `initCreativeItems`）下发，0.12 不认识的物品一律不下发（0.12 认识的物品比 0.13 还少，参照服务端为 Prismarine-0.12）。配方表同样按 0.12 白名单过滤
+- **登录三格式嗅探**：`LoginPacket` 自动识别 0.12/0.13/0.14 明文布局与 0.15/0.16 JWT 链（zlib + chain/skin token；0.16 多一个 gameEdition 字节且压缩长度为 varint），玩家名 / UUID / 皮肤 / 地址全部正常还原；0.13.0（协议 37）自动补齐缺失字段；0.12（协议 34）尾部是 1 字节 `slim` 标志而非 `skinName` 字符串
 - **封包 ID 全量重映射**：0.15.0 把全部封包 ID 从 `0x8f..0xca` 改为 `0x01..0x41`，0.16 又插入资源包握手整体偏移到 `0x01..0x4f`，`MultiProtocol` 持两张映射表按玩家协议逐个翻译
 - **0.16 全量重编码**：0.16 把基础类型全换了——字符串 varint 前缀、物品 slot 改 `varint id + varint(damage<<8|count)`、实体 ID 改 zigzag varint、坐标改 `varint x + byte y + varint z`、浮点改小端、metadata 改字典式，出站包从对象属性逐字段重编码，入站包解析回原生对象，`Player.php` 逻辑零改动
 - **0.16 资源包握手与指令表**：登录后自动补发空 `ResourcePacksInfoPacket`（我们不发资源包）；`StartGame` 之后按参考端（Genisys 0.16）的时序下发 `AvailableCommandsPacket` 指令表（JSON 结构已与参考端逐字节一致），0.16 客户端的斜杠指令走 `CommandStepPacket`，已接入指令调度（**但有上述已知问题**）
 - **字段级布局适配**：`UpdateBlockPacket`/`SetEntityMotionPacket` 在 0.15/0.16 拆为单条记录；`MoveEntityPacket` 拆分为单实体+字节旋转；`AddEntityPacket` 旋转缩放；`ChangeDimensionPacket` 补 xyz；`RemovePlayerPacket` 映射为 `RemoveEntityPacket`；0.16 配方表 varint 重编码
-- **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15/0.16 用 `0xfe` 前缀，0.13 无前缀，出站按玩家协议分别封装
-- **批量包按协议分组**：广播/批量压缩流按 0.13/0.14/0.15/0.16 四条线路各压一份（0.16 内层帧为 varint 长度），互不串包；入站批量包按玩家协议解析（真实 0.13 客户端会把登录包塞进 BatchPacket，已兼容）
-- **区块缓存按协议分组**：同一区块的压缩批包按线路各缓存一份，内存友好
+- **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15/0.16 用 `0xfe` 前缀，0.12/0.13 无前缀，出站按玩家协议分别封装
+- **批量包按协议分组**：广播/批量压缩流按 0.12/0.13/0.14/0.15/0.16 五条线路各压一份（0.16 内层帧为 varint 长度），互不串包；入站批量包按玩家协议解析（真实 0.13 客户端会把登录包塞进 BatchPacket，已兼容）
+- **区块缓存按协议分组**：同一区块的压缩批包按线路各缓存一份（0.12/0.13 与 0.14 共用同一份，区块载荷完全相同），内存友好
 - **生物拴绳显示修复**：0.15/0.16 客户端需要 metadata 里的 `DATA_LEAD_HOLDER=-1` / `DATA_LEAD=0`（0.16 为 `DATA_LEAD_HOLDER_EID=38`），缺失时所有生物都会显示被拴着——翻译层已自动注入
 - **0.13 创造栏白名单过滤**：创造物品栏严格按 0.13 官方创造清单（245 个 id，提取自 Genisys 0.13 `initCreativeItems`）下发，0.14 新增物品（地图、漏斗、侦测器等）一律不下发 —— 否则 0.13 客户端在**新号加载地形 / 生存模式打开背包**时会直接闪退
 - **0.13 创造取物快速路径**：0.13 创造模式取物走 `ContainerSetSlotPacket` 直改背包（与 Genisys 0.13 行为一致），绕开交易组校验（交易组会拒绝 `source=air` 的创造取物导致拿不出东西）
-- **MOTD 保持 0.14 原生公告**（协议 70），0.13/0.15 客户端直接连即可（与 axe.ink 同款方案）
+- **MOTD 保持 0.14 原生公告**（协议 70），0.12/0.13/0.15 客户端直接连即可（与 axe.ink 同款方案）
 
 > 注：0.13.0（协议 37）因客户端登录包缺字段会被判为无效皮肤（与原版 Genisys 0.13 行为一致），请使用 **0.13.1 / 0.13.2**。0.16 暂不支持地图物品数据包（MPApi 地图功能对 0.16 客户端自动降级为不发送）。
 >
-> 0.16 剩余问题追踪：**① 生存模式陆地上的氧气条** —— 参考端（Genisys 0.16）给玩家的 metadata 只发 nametag、完全不发 `DATA_AIR`/`DATA_MAX_AIR`，我们已同样跳过，但真机仍显示，待进一步定位；**② 指令** —— 服务器链路正常（模拟器发 CommandStep 后客户端能收到 `SetPlayerGameType`）、指令表 JSON 已与参考端一致，真机仍被客户端本地拦截，待真机抓 `0x4b`/`0x4c` 原始字节继续排查。
+> 0.16 剩余问题追踪：**① 生存模式陆地上的氧气条** —— 参考端（Genisys 0.16）给玩家的 metadata 只发 nametag、完全不发 `DATA_AIR`/`DATA_MAX_AIR`，我们已同样跳过，但真机仍显示，待进一步定位；**② 指令** —— 服务器链路正常（模拟器发 CommandStep 后客户端能收到 `SetPlayerGameType`）、指令表 JSON 已与参考端一致，真机仍被客户端本地拦截，待真机抓 `0x4b`/`0x4c` 原始字节继续排查
+
+> 参考服务端：0.12 的字段差异对照基于 **Prismarine-0.12**（源码已拉到本机 `C:\Users\Administrator\Prismarine-0.12`，内含官方 `MCPE_0.12.1.apk` 便于真机对照；完整字段 diff 报告见 `C:\Users\Administrator\diff-012-vs-013.md`）。0.16 的对照基于 `genisys-0.16` 勾出来的 Genisys 0.16。
 
 ### 🚀 深度性能优化（磁盘 I/O · 内存 · CPU · 事件）
 

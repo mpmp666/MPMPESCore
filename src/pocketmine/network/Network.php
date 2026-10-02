@@ -239,11 +239,11 @@ class Network {
 			return; //corrupt zlib stream, just drop it
 		}
 		//0.15.x clients send batch inner items as [pid][payload] with the new ids;
-		//0.14.x sends [0x8e][pid][payload]; 0.13.x sends bare [pid][payload] with 0.14 ids.
+		//0.14.x sends [0x8e][pid][payload]; 0.13.x/0.12.x send bare [pid][payload] with 0.14 ids.
 		//0.16.x sends [pid][payload] with its own ids and uvarint inner lengths.
 		$family = MultiProtocol::wireFamily($p->getProtocol());
 		$newProto = ($family === 1);
-		$oldProto = ($family === 2);
+		$oldProto = ($family === 2 or $family === 4); //0.13.x and 0.12.x are both bare
 		$is16 = ($family === 3);
 		$minInner = ($newProto or $oldProto or $is16) ? 1 : 2;
 		$len = strlen($str);
@@ -322,6 +322,11 @@ class Network {
 					$pk->setBuffer($buf, $bufOffset);
 
 					$pk->decode();
+					//0.12 的 ContainerSetSlot 没有 hotbarSlot, 按 0.12 布局重解析
+					if($family === 4 and $pk::NETWORK_ID === Info::CONTAINER_SET_SLOT_PACKET){
+						$pk->setBuffer($buf, $bufOffset);
+						MultiProtocol::decode012ContainerSetSlot($pk);
+					}
 					$p->handleDataPacket($pk);
 
 					if ($pk->getOffset() <= 0) {

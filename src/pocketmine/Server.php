@@ -407,6 +407,9 @@ class Server{
 	/** @var CraftingDataPacket 0.13 客户端用的过滤版配方表(去掉 0.14 新增物品的配方) */
 	private $recipeListOld = null;
 
+	/** @var CraftingDataPacket 0.12 客户端用的过滤版配方表(只保留 0.12 认识物品的配方) */
+	private $recipeList12 = null;
+
 	/** @var Synapse */
 	private $synapse = null;
 
@@ -2308,9 +2311,9 @@ private function lookupAddress($address) {
 	public static function broadcastPacket(array $players, DataPacket $packet){
 		$packet->encode();
 		$packet->isEncoded = true;
-		//split recipients by wire family (0.13 bare / 0.14 0x8e / 0.15 0xfe / 0.16 0xfe+varint):
+		//split recipients by wire family (0.12/0.13 bare / 0.14 0x8e / 0.15 0xfe / 0.16 0xfe+varint):
 		//each group needs its own translated bytes
-		$groups = [[], [], [], []];
+		$groups = [[], [], [], [], []];
 		foreach($players as $player){
 			$groups[MultiProtocol::wireFamily($player->getProtocol())][] = $player;
 		}
@@ -2335,6 +2338,9 @@ private function lookupAddress($address) {
 		if(isset($packet->__encapsulatedPacket13)){
 			unset($packet->__encapsulatedPacket13);
 		}
+		if(isset($packet->__encapsulatedPacket12)){
+			unset($packet->__encapsulatedPacket12);
+		}
 		if(isset($packet->__encapsulatedPacket16)){
 			unset($packet->__encapsulatedPacket16);
 		}
@@ -2351,8 +2357,8 @@ private function lookupAddress($address) {
 		Timings::$playerNetworkTimer->startTiming();
 
 		//group targets by wire family: each group gets its own translated payload
-		//(0.13 tail fields trimmed / 0.15 ids remapped / 0.16 re-encoded / 0.14 native)
-		$groups = [[], [], [], []];
+		//(0.12/0.13 tail fields trimmed / 0.15 ids remapped / 0.16 re-encoded / 0.14 native)
+		$groups = [[], [], [], [], []];
 		foreach($players as $p){
 			if($p->isConnected()){
 				$groups[MultiProtocol::wireFamily($p->getProtocol())][] = $this->identifiers[spl_object_hash($p)];
@@ -2865,16 +2871,26 @@ private function lookupAddress($address) {
 		$pkOld = new CraftingDataPacket();
 		$pkOld->cleanRecipes = true;
 
+		//0.12 认识的物品比 0.13 少, 同样按 0.12 自己的清单过滤
+		$pk12 = new CraftingDataPacket();
+		$pk12->cleanRecipes = true;
+
 		foreach($this->getCraftingManager()->getRecipes() as $recipe){
 			if($recipe instanceof ShapedRecipe){
 				$pk->addShapedRecipe($recipe);
 				if(self::recipeCompatibleWithOldProtocol($recipe)){
 					$pkOld->addShapedRecipe($recipe);
+					if(self::recipeCompatibleWith012Protocol($recipe)){
+						$pk12->addShapedRecipe($recipe);
+					}
 				}
 			}elseif($recipe instanceof ShapelessRecipe){
 				$pk->addShapelessRecipe($recipe);
 				if(self::recipeCompatibleWithOldProtocol($recipe)){
 					$pkOld->addShapelessRecipe($recipe);
+					if(self::recipeCompatibleWith012Protocol($recipe)){
+						$pk12->addShapelessRecipe($recipe);
+					}
 				}
 			}
 		}
@@ -2883,6 +2899,9 @@ private function lookupAddress($address) {
 			$pk->addFurnaceRecipe($recipe);
 			if(self::recipeCompatibleWithOldProtocol($recipe)){
 				$pkOld->addFurnaceRecipe($recipe);
+				if(self::recipeCompatibleWith012Protocol($recipe)){
+					$pk12->addFurnaceRecipe($recipe);
+				}
 			}
 		}
 
@@ -2893,6 +2912,43 @@ private function lookupAddress($address) {
 		$pkOld->encode();
 		$pkOld->isEncoded = true;
 		$this->recipeListOld = $pkOld;
+
+		$pk12->encode();
+		$pk12->isEncoded = true;
+		$this->recipeList12 = $pk12;
+	}
+
+	/**
+	 * 配方是否兼容 0.12 客户端(产物和所有配料都在 0.12 的创造栏白名单里)
+	 *
+	 * @param \pocketmine\inventory\Recipe $recipe
+	 *
+	 * @return bool
+	 */
+	private static function recipeCompatibleWith012Protocol($recipe){
+		if(!MultiProtocol::is012ProtocolCreativeItem($recipe->getResult()->getId())){
+			return false;
+		}
+		if($recipe instanceof FurnaceRecipe){
+			return MultiProtocol::is012ProtocolCreativeItem($recipe->getInput()->getId());
+		}
+		if($recipe instanceof ShapedRecipe){
+			foreach($recipe->getIngredientMap() as $row){
+				foreach($row as $item){
+					if(!MultiProtocol::is012ProtocolCreativeItem($item->getId())){
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+		//ShapelessRecipe
+		foreach($recipe->getIngredientList() as $item){
+			if(!MultiProtocol::is012ProtocolCreativeItem($item->getId())){
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -2929,7 +2985,13 @@ private function lookupAddress($address) {
 	}
 
 	public function sendRecipeList(Player $p){
-		$p->dataPacket(MultiProtocol::isOldProtocol($p->getProtocol()) ? $this->recipeListOld : $this->recipeList);
+		$family = MultiProtocol::wireFamily($p->getProtocol());
+		if($family === 4){
+			//0.12: 只发 0.12 认识物品的配方
+			$p->dataPacket($this->recipeList12 !== null ? $this->recipeList12 : $this->recipeList);
+			return;
+		}
+		$p->dataPacket($family === 2 ? $this->recipeListOld : $this->recipeList);
 	}
 
 	private function checkTickUpdates($currentTick, $tickTime){

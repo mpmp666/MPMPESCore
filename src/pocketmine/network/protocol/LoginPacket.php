@@ -41,6 +41,8 @@ class LoginPacket extends DataPacket{
 
 	public $skinName = null;
 	public $skin = null;
+	/** 0.12.x 客户端的 slim(细手臂皮肤模型)标志, 0.13+ 没有该字段 */
+	public $slim = false;
 
 	public function decode(){
 		//Cross-version sniff: 0.14.x logins start with the username string, whose
@@ -56,7 +58,20 @@ class LoginPacket extends DataPacket{
 		$this->username = $this->getString();
 		$this->protocol1 = $this->getInt();
 		$this->protocol2 = $this->getInt();
-		if($this->protocol1 < 38){ //0.13.0 (protocol 37) sent no clientId/uuid/skin: fill safe placeholders
+		if($this->protocol1 < 38){
+			if($this->protocol1 === 34){
+				//0.12.1 (protocol 34): full login fields like 0.13.1+, but a 1-byte
+				//slim flag instead of the skinName string
+				$this->clientId = $this->getLong();
+				$this->clientUUID = $this->getUUID();
+				$this->serverAddress = $this->getString();
+				$this->clientSecret = $this->getString();
+				$this->slim = ord($this->get(1)) > 0;
+				$this->skinName = $this->slim ? "CustomSlim" : "Standard_Steve";
+				$this->skin = $this->getString();
+				return;
+			}
+			//0.13.0 (protocol 37) sent no clientId/uuid/skin: fill safe placeholders
 			$this->clientId = 0;
 			$this->clientUUID = UUID::fromRandom();
 			$this->serverAddress = "";

@@ -31,9 +31,9 @@ interface Info{
 	 * Actual Minecraft: PE protocol version
 	 */
 	const CURRENT_PROTOCOL = 70;
-	//37/38/39 = MCPE 0.13.x; 45/46/60/70 = MCPE 0.14.x; 81-83 = MCPE 0.15.x (translated by MultiProtocol)
+	//34 = MCPE 0.12.1; 37/38/39 = MCPE 0.13.x; 45/46/60/70 = MCPE 0.14.x; 81-83 = MCPE 0.15.x (translated by MultiProtocol)
 	//90/91 = MCPE 0.16.x (翻译层 family 3; 修复验证期间临时放行, 见 MultiProtocol::translateOutgoing16 TODO)
-	const ACCEPTED_PROTOCOLS = [37, 38, 39, 45, 46, 60, 70, 81, 82, 83, 90, 91];
+	const ACCEPTED_PROTOCOLS = [34, 37, 38, 39, 45, 46, 60, 70, 81, 82, 83, 90, 91];
 
 	const LOGIN_PACKET = 0x8f;
 	const PLAY_STATUS_PACKET = 0x90;

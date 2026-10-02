@@ -157,6 +157,13 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 					$pk = $this->getPacket($packet->buffer, $player->getProtocol());
 					if($pk !== null){
 						$pk->decode();
+						//0.12 的 ContainerSetSlot 没有 0.14/0.13 的 hotbarSlot 字段
+						if(MultiProtocol::is012Protocol($player->getProtocol())
+							and $pk::NETWORK_ID === ProtocolInfo::CONTAINER_SET_SLOT_PACKET){
+							$start = (strlen($packet->buffer) > 1 and $packet->buffer[0] === "\x8e") ? 2 : 1;
+							$pk->setBuffer($packet->buffer, $start);
+							MultiProtocol::decode012ContainerSetSlot($pk);
+						}
 						$player->handleDataPacket($pk);
 					}
 				}
@@ -294,6 +301,23 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 			}
 			$mapped = MultiProtocol::toServerPid($pid);
 			if($mapped === null or ($data = $this->network->getPacket($mapped)) === null){
+				return null;
+			}
+			$data->setBuffer($buffer, $start);
+
+			return $data;
+		}
+
+		if(MultiProtocol::is012Protocol($protocol)){
+			//0.12.x wire: bare [pid][payload] (no marker, same ids as 0.14);
+			//tolerate a 0x8e marker just in case
+			$pid = ord($buffer[0]);
+			$start = 1;
+			if($pid === 0x8e){
+				$pid = ord($buffer[1]);
+				$start = 2;
+			}
+			if(($data = $this->network->getPacket($pid)) === null){
 				return null;
 			}
 			$data->setBuffer($buffer, $start);

@@ -43,6 +43,9 @@ class MultiProtocol{
 	const PROTOCOL_0_13 = 37;
 	const PROTOCOL_0_13_LAST = 39;
 
+	/** MCPE 0.12.1 protocol (Prismarine-0.12 reports CURRENT_PROTOCOL = 34) */
+	const PROTOCOL_0_12 = 34;
+
 	/** First protocol version of the 0.16.x family (0.16.0/0.16.1=90, 0.16.2=91) */
 	const PROTOCOL_0_16 = 90;
 
@@ -51,6 +54,9 @@ class MultiProtocol{
 
 	/** 0.13 官方创造栏白名单(从 Genisys 0.13 initCreativeItems 提取, 精确匹配 0.13 客户端) */
 	public static $oldProtocolCreativeItems = [1,2,3,4,5,6,7,12,13,14,15,16,17,18,19,20,21,22,24,25,27,28,30,31,32,35,37,38,39,40,41,42,44,45,46,47,48,49,50,52,53,54,56,57,58,61,65,66,67,69,70,72,73,76,77,78,79,80,81,82,85,86,87,88,89,91,96,98,99,100,101,102,103,106,107,108,109,110,111,112,113,114,116,120,121,123,126,128,129,131,133,134,135,136,139,143,145,146,147,148,151,152,153,155,156,158,159,161,162,163,164,167,170,171,172,173,174,175,183,184,185,186,187,243,245,256,257,258,259,260,261,262,263,264,265,266,267,268,269,270,271,272,273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,292,293,294,295,296,297,318,319,320,321,322,323,324,325,328,330,331,332,333,334,337,338,339,341,345,346,347,348,349,350,351,352,353,354,355,357,359,360,361,362,363,364,365,366,367,369,370,371,372,373,374,375,376,377,378,379,382,383,384,388,390,391,392,393,394,396,397,400,406,411,412,413,414,415,427,428,429,430,431,438,458,460,463,466];
+
+	/** 0.12 官方创造栏白名单(从 Prismarine-0.12 initCreativeItems 提取, 236 个 id) */
+	public static $oldProtocolCreativeItems12 = [1,2,3,4,5,6,7,12,13,14,15,16,17,18,19,20,21,22,24,25,27,28,30,31,32,35,37,39,40,41,42,44,45,46,47,48,49,50,52,53,54,56,57,58,61,65,66,67,69,70,72,73,75,77,78,79,80,81,82,86,87,88,89,91,96,98,99,100,101,102,103,106,107,108,109,110,111,112,113,114,116,120,121,122,126,128,129,131,133,134,135,136,139,143,145,146,147,148,151,152,153,155,156,158,159,161,162,163,164,167,170,171,172,173,174,175,183,184,185,186,187,243,244,245,256,257,258,259,260,261,262,263,264,265,266,267,268,269,270,271,272,273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290,291,292,293,294,295,296,297,318,319,320,321,322,323,324,325,328,330,331,334,337,338,339,341,345,346,347,348,350,351,352,353,354,355,357,359,360,361,362,363,364,365,366,367,369,370,371,372,374,375,376,377,378,379,382,383,384,388,390,391,392,393,394,396,397,400,406,411,412,413,414,415,427,428,429,430,431,458];
 
 	/**
 	 * 该物品 id 是否是 0.13 客户端不认识的 0.14 新增物品
@@ -72,6 +78,18 @@ class MultiProtocol{
 	 */
 	public static function isOldProtocolCreativeItem($itemId){
 		return in_array($itemId, self::$oldProtocolCreativeItems, true);
+	}
+
+	/**
+	 * 该物品 id 是否在 0.12 官方创造栏中(0.12 认识的物品比 0.13 少, 给 0.12 客户端发
+	 * 0.13/0.14 的物品会让客户端在打开创造背包/加载地形时崩溃, 所以按 0.12 自己的清单过滤）
+	 *
+	 * @param int $itemId
+	 *
+	 * @return bool
+	 */
+	public static function is012ProtocolCreativeItem($itemId){
+		return in_array($itemId, self::$oldProtocolCreativeItems12, true);
 	}
 
 	/** 0.14 (protocol 70) packet id => 0.15 (protocol 81) packet id */
@@ -216,6 +234,7 @@ class MultiProtocol{
 	 *   1 = 0.15.x (0xfe encapsulation, renumbered ids, adjusted fields)
 	 *   2 = 0.13.x (no encapsulation marker, three packets lack the 0.14 tail fields)
 	 *   3 = 0.16.x (0xfe encapsulation, own id space, varint/LFloat primitives)
+	 *   4 = 0.12.x (no encapsulation marker, 0.13 tail trims + four 0.12 quirks)
 	 *
 	 * @param int|null $protocol
 	 *
@@ -233,6 +252,9 @@ class MultiProtocol{
 		}
 		if($protocol >= self::PROTOCOL_0_13 and $protocol <= self::PROTOCOL_0_13_LAST){
 			return 2;
+		}
+		if($protocol === self::PROTOCOL_0_12){
+			return 4;
 		}
 		return 0;
 	}
@@ -282,6 +304,17 @@ class MultiProtocol{
 	}
 
 	/**
+	 * Whether the given client protocol belongs to the 0.12.x family (protocol 34)
+	 *
+	 * @param int|null $protocol
+	 *
+	 * @return bool
+	 */
+	public static function is012Protocol($protocol){
+		return $protocol !== null and $protocol === self::PROTOCOL_0_12;
+	}
+
+	/**
 	 * Maps a 0.14-native packet id to its 0.15 counterpart, or null if the
 	 * packet does not exist in 0.15 (caller should drop it for 0.15 clients).
 	 *
@@ -323,6 +356,9 @@ class MultiProtocol{
 		if($family === 3){
 			return self::translateOutgoing16($packet);
 		}
+		if($family === 4){
+			return self::translateOutgoing12($packet);
+		}
 		//family 0 (native 0.14.x): 0.16-only virtual packets must never reach it
 		if($packet instanceof DataPacket){
 			if($packet::NETWORK_ID >= 0xec){
@@ -341,7 +377,7 @@ class MultiProtocol{
 
 	/**
 	 * RakNet encapsulation marker for a wire family:
-	 * 0.14.x = 0x8e, 0.15.x/0.16.x = 0xfe, 0.13.x = no marker at all.
+	 * 0.14.x = 0x8e, 0.15.x/0.16.x = 0xfe, 0.13.x/0.12.x = no marker at all.
 	 *
 	 * @param int $family
 	 *
@@ -351,7 +387,7 @@ class MultiProtocol{
 		if($family === 1 or $family === 3){
 			return "\xfe";
 		}
-		return $family === 2 ? "" : "\x8e";
+		return ($family === 2 or $family === 4) ? "" : "\x8e";
 	}
 
 	/**
@@ -367,6 +403,9 @@ class MultiProtocol{
 		}
 		if($family === 3){
 			return "__encapsulatedPacket16";
+		}
+		if($family === 4){
+			return "__encapsulatedPacket12";
 		}
 		return $family === 2 ? "__encapsulatedPacket13" : "__encapsulatedPacket";
 	}
@@ -532,6 +571,207 @@ class MultiProtocol{
 			default:
 				return [$buf]; //identical layout, identical id
 		}
+	}
+
+	/**
+	 * Translates an encoded 0.14-native packet buffer for a 0.12.x client
+	 * (protocol 34). 0.12 shares the 0.14 packet id space and, per a full
+	 * encode/decode diff against Genisys 0.13, differs from 0.13 only in four
+	 * places (StartGame/ContainerOpen/AdventureSettings need the same tail trims
+	 * as 0.13, since 0.12 and 0.13 are byte-identical for those three):
+	 *   ContainerSetSlotPacket  0.14: ...[slot][hotbarSlot short][item] -> 0.12: [slot][item]
+	 *   ChangeDimensionPacket   0.14: [dim byte][0]  -> 0.12: [int dimId]
+	 *   PlayerListPacket ADD    0.14: [..][skinName string][skin string] -> 0.12: [slim byte][skin string]
+	 *   CraftingDataPacket      shaped recipe ingredient slots are written in the
+	 *                           (z<height, x<width) order instead of 0.14's (z<width, x<height)
+	 *
+	 * @param DataPacket|string $packet encoded DataPacket or raw encoded buffer
+	 *
+	 * @return string[]
+	 */
+	public static function translateOutgoing12($packet){
+		if($packet instanceof DataPacket){
+			if($packet::NETWORK_ID >= 0xec){
+				return []; //0.16-only virtual packet
+			}
+			if(!$packet->isEncoded){
+				$packet->encode();
+			}
+			$buf = $packet->buffer;
+			if(strlen($buf) > 0 and ord($buf[0]) !== $packet::NETWORK_ID){
+				return [$buf]; //already translated for another family
+			}
+		}else{
+			$buf = $packet;
+			if(strlen($buf) > 0 and ord($buf[0]) >= 0xec){
+				return []; //0.16-only virtual packet
+			}
+		}
+
+		$pid = strlen($buf) > 0 ? ord($buf[0]) : -1;
+		switch($pid){
+			case Info::START_GAME_PACKET:
+				//same tail trim as 0.13: keep the 46 header bytes + shared trailing 0
+				return [strlen($buf) >= 47 ? substr($buf, 0, 46) . "\x00" : $buf];
+
+			case Info::CONTAINER_OPEN_PACKET:
+				//same as 0.13: drop the 0.14 entityId long (17 bytes total)
+				return [strlen($buf) >= 17 ? substr($buf, 0, 17) : $buf];
+
+			case Info::ADVENTURE_SETTINGS_PACKET:
+				//same as 0.13: drop userPermission/globalPermission (5 bytes total)
+				return [strlen($buf) >= 5 ? substr($buf, 0, 5) : $buf];
+
+			case Info::CONTAINER_SET_SLOT_PACKET:
+				//[pid][windowid][slot short][hotbarSlot short][item] -> drop the hotbarSlot short
+				if(strlen($buf) < 6){
+					return [$buf];
+				}
+				return [substr($buf, 0, 4) . substr($buf, 6)];
+
+			case Info::CHANGE_DIMENSION_PACKET:
+				//[pid][dim byte][0] -> [pid][int dimId]
+				if(strlen($buf) < 2){
+					return [$buf];
+				}
+				return [chr(0xc1) . Binary::writeInt(ord($buf[1]))];
+
+			case Info::PLAYER_LIST_PACKET:
+				return [self::playerList12($buf)];
+
+			case Info::CRAFTING_DATA_PACKET:
+				if($packet instanceof CraftingDataPacket){
+					return [self::crafting12($packet)];
+				}
+				return [$buf]; //cannot reorder slots without the recipe objects
+
+			default:
+				return [$buf]; //identical layout, identical id
+		}
+	}
+
+	/**
+	 * Re-encodes a 0.14 PlayerListPacket for 0.12: TYPE_ADD entries carry a
+	 * 1-byte slim flag instead of the 0.14 skinName string.
+	 *
+	 * @param string $buf native encoded PlayerListPacket
+	 *
+	 * @return string
+	 */
+	private static function playerList12($buf){
+		$off = 1;
+		$type = ord($buf[$off++]);
+		$count = Binary::readInt(substr($buf, $off, 4)); $off += 4;
+		$out = chr(0xc3) . chr($type) . Binary::writeInt($count);
+		for($i = 0; $i < $count and $off < strlen($buf); $i++){
+			if($type === 0){ //TYPE_ADD
+				$uuid = substr($buf, $off, 16); $off += 16;
+				$eid = substr($buf, $off, 8); $off += 8;
+				//name (LShort length + bytes)
+				$nl = Binary::readLShort(substr($buf, $off, 2)); $off += 2;
+				$name = substr($buf, $off, $nl); $off += $nl;
+				//skinName string -> slim byte (skin names ending in "Slim" are slim skins)
+				$sl = Binary::readLShort(substr($buf, $off, 2)); $off += 2;
+				$skinName = substr($buf, $off, $sl); $off += $sl;
+				$slim = stripos($skinName, "slim") !== false ? 1 : 0;
+				//skin string (kept as-is)
+				$kl = Binary::readLShort(substr($buf, $off, 2)); $off += 2;
+				$skin = substr($buf, $off, $kl); $off += $kl;
+				$out .= $uuid . $eid . Binary::writeLShort(strlen($name)) . $name .
+					chr($slim) . Binary::writeLShort(strlen($skin)) . $skin;
+			}else{
+				$out .= substr($buf, $off, 16); $off += 16; //uuid only
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Re-encodes a CraftingDataPacket for 0.12. The envelope is 0.14-style;
+	 * only the shaped-recipe ingredient slot order changes:
+	 *   0.14/0.13: for(z < width) for(x < height)
+	 *   0.12:      for(z < height) for(x < width)
+	 *
+	 * @param CraftingDataPacket $packet
+	 *
+	 * @return string
+	 */
+	private static function crafting12(CraftingDataPacket $packet){
+		$out = chr(0xba) . Binary::writeInt(0); //placeholder, replaced below
+		$body = "";
+		$count = 0;
+		foreach($packet->entries as $d){
+			$entry = "";
+			if($d instanceof ShapelessRecipe){
+				$entry .= Binary::writeInt($d->getIngredientCount());
+				foreach($d->getIngredientList() as $item){
+					$entry .= self::slot14($item);
+				}
+				$entry .= Binary::writeInt(1);
+				$entry .= self::slot14($d->getResult());
+				$entry .= $d->getId()->toBinary();
+				$type = 0;
+			}elseif($d instanceof ShapedRecipe){
+				$w = $d->getWidth();
+				$h = $d->getHeight();
+				$entry .= Binary::writeInt($w);
+				$entry .= Binary::writeInt($h);
+				for($z = 0; $z < $h; ++$z){
+					for($x = 0; $x < $w; ++$x){
+						$entry .= self::slot14($d->getIngredient($x, $z));
+					}
+				}
+				$entry .= Binary::writeInt(1);
+				$entry .= self::slot14($d->getResult());
+				$entry .= $d->getId()->toBinary();
+				$type = 1;
+			}elseif($d instanceof FurnaceRecipe){
+				if($d->getInput()->getDamage() !== 0){
+					$entry .= Binary::writeInt(($d->getInput()->getId() << 16) | $d->getInput()->getDamage());
+					$entry .= self::slot14($d->getResult());
+					$type = 3;
+				}else{
+					$entry .= Binary::writeInt($d->getInput()->getId());
+					$entry .= self::slot14($d->getResult());
+					$type = 2;
+				}
+			}else{
+				continue; //unsupported entry: skip
+			}
+			$body .= Binary::writeInt($type) . Binary::writeInt(strlen($entry)) . $entry;
+			$count++;
+		}
+		return chr(0xba) . Binary::writeInt($count) . $body . chr($packet->cleanRecipes ? 1 : 0);
+	}
+
+	/**
+	 * 0.12 的 ContainerSetSlotPacket 字段布局是 [windowid][slot][item],
+	 * 没有 0.14/0.13 插在 slot 与 item 之间的 hotbarSlot(short)。
+	 * 调用前需把 packet 的 offset 重新定位到 pid 之后。
+	 *
+	 * @param DataPacket $pk
+	 */
+	public static function decode012ContainerSetSlot($pk){
+		$pk->windowid = $pk->getByte();
+		$pk->slot = $pk->getShort();
+		$pk->hotbarSlot = 0; //0.12 没有该字段
+		$pk->item = $pk->getSlot();
+	}
+
+	/**
+	 * 0.14-style item slot: short id, byte count, short damage, LShort nbt length, nbt.
+	 *
+	 * @param Item $item
+	 *
+	 * @return string
+	 */
+	private static function slot14(Item $item){
+		if($item->getId() === 0){
+			return Binary::writeShort(0) . "\x00" . Binary::writeShort(0) . Binary::writeLShort(0);
+		}
+		$nbt = $item->getCompoundTag();
+		return Binary::writeShort($item->getId()) . chr($item->getCount()) .
+			Binary::writeShort($item->getDamage()) . Binary::writeLShort(strlen($nbt)) . $nbt;
 	}
 
 	// --------------------------------------------------------------------
