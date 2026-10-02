@@ -22,7 +22,7 @@
 - **MiMo V2.5 Free**
 - **Kimi K3**
 - **Hy4 preview**
-- **DeepSeek V4 Flash**
+- **DeepSeek V4.1 Flash**
 
 ## ✨ 新增功能与改进
 
