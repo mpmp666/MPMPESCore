@@ -1367,9 +1367,28 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$pk->generator = 1; //0 old, 1 infinite, 2 flat
 		$pk->gamemode = $this->gamemode & 0x01;
 		$pk->eid = 0;*/
-		$pk = new SetPlayerGameTypePacket();
-		$pk->gamemode = $this->gamemode & 0x01;
-		$this->dataPacket($pk);
+		if(MultiProtocol::is011Protocol($this->protocol)){
+			//0.11 没有 SetPlayerGameType 包: 参考端(Steadfast2-011)通过重发
+			//StartGame(带新 gamemode) + AdventureSettings 来切换模式
+			$spawnPosition = $this->getSpawn();
+			$pk = new StartGamePacket();
+			$pk->seed = -1;
+			$pk->dimension = $this->level->getDimension();
+			$pk->x = $this->x;
+			$pk->y = $this->y;
+			$pk->z = $this->z;
+			$pk->spawnX = (int) $spawnPosition->x;
+			$pk->spawnY = (int) $spawnPosition->y;
+			$pk->spawnZ = (int) $spawnPosition->z;
+			$pk->generator = 1;
+			$pk->gamemode = $this->gamemode & 0x01;
+			$pk->eid = 0;
+			$this->dataPacket($pk);
+		}else{
+			$pk = new SetPlayerGameTypePacket();
+			$pk->gamemode = $this->gamemode & 0x01;
+			$this->dataPacket($pk);
+		}
 		$this->sendSettings();
 
 		if($this->gamemode === Player::SPECTATOR){
@@ -2376,6 +2395,12 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$items = array_values(array_filter($items, function($item){
 				return MultiProtocol::is012ProtocolCreativeItem($item->getId());
 			}));
+		}elseif(MultiProtocol::is011Protocol($this->protocol)){
+			//0.11: 只保留 0.11 官方创造栏里精确存在的 (id, meta) 组合,
+			//否则客户端打开创造背包会直接闪退
+			$items = array_values(array_filter($items, function($item){
+				return MultiProtocol::is011CreativeItem($item->getId(), $item->getDamage());
+			}));
 		}
 		return $items;
 	}
@@ -2703,7 +2728,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 				//0.14.x = 45/46/60/70; 0.15.x 及之后 JWT 登录族按 0.15 线路接入
 				//(0.16 = 90/91: family 3 翻译, 修复验证期间临时放行)
-				if(!in_array($packet->protocol1, ProtocolInfo::ACCEPTED_PROTOCOLS) and !($packet->protocol1 >= 81 and $packet->protocol1 <= 99)){
+				//(0.11.x = 20-33: family 5 翻译)
+				if(!in_array($packet->protocol1, ProtocolInfo::ACCEPTED_PROTOCOLS) and !($packet->protocol1 >= 81 and $packet->protocol1 <= 99) and !MultiProtocol::is011Protocol($packet->protocol1)){
 					if($packet->protocol1 < ProtocolInfo::CURRENT_PROTOCOL){
 						$message = "disconnectionScreen.outdatedClient";
 
@@ -2892,8 +2918,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				break;
 			case ProtocolInfo::USE_ITEM_PACKET:
 				/** @var UseItemPacket $pk */
-				if(!MultiProtocol::is016Protocol($this->protocol)){
-					//0.16 packets arrive fully decoded via MultiProtocol::decodeIncoming16()
+				if(!MultiProtocol::is016Protocol($this->protocol) and !MultiProtocol::is011Protocol($this->protocol)){
+					//0.16 and 0.11 packets arrive fully decoded via their protocol adapters.
 					$packet->decodeAdditional($this->protocol);
 				}
 				if($this->spawned === false or !$this->isAlive() or $this->blocked){

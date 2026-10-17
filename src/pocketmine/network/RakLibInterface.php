@@ -142,6 +142,13 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 			try{
 				if($packet->buffer !== ""){
 					$player = $this->players[$identifier];
+					if(MultiProtocol::is011Protocol($player->getProtocol())){
+						$pk = MultiProtocol::decodeIncoming11($packet->buffer);
+						if($pk !== null){
+							$player->handleDataPacket($pk);
+						}
+						return;
+					}
 					if(MultiProtocol::is016Protocol($player->getProtocol())){
 						//0.16 wire: [0xfe][pid][payload] or [pid][payload] inside batches
 						$buf = $packet->buffer;
@@ -156,7 +163,9 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 					}
 					$pk = $this->getPacket($packet->buffer, $player->getProtocol());
 					if($pk !== null){
-						$pk->decode();
+						if(!$pk->isEncoded){
+							$pk->decode();
+						}
 						//0.12 的 ContainerSetSlot 没有 0.14/0.13 的 hotbarSlot 字段
 						if(MultiProtocol::is012Protocol($player->getProtocol())
 							and $pk::NETWORK_ID === ProtocolInfo::CONTAINER_SET_SLOT_PACKET){
@@ -291,6 +300,14 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 	}
 
 	private function getPacket($buffer, $protocol = null){
+		if(MultiProtocol::is011Protocol($protocol)){
+			return MultiProtocol::decodeIncoming11($buffer);
+		}
+		// Before LOGIN has been decoded, protocol 23 uses bare packet IDs
+		// 0x82 (LOGIN) and 0xb1 (BATCH), not the native 0x8e framing marker.
+		if($protocol === null and strlen($buffer) > 0 and (ord($buffer[0]) === 0x82 or ord($buffer[0]) === 0xb1)){
+			return MultiProtocol::decodeIncoming11($buffer);
+		}
 		if(MultiProtocol::isNewProtocol($protocol)){
 			//0.15.x wire: [pid][payload] or [0xfe][pid][payload]
 			$pid = ord($buffer[0]);

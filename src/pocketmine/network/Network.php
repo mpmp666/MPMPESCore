@@ -248,6 +248,24 @@ class Network {
 		$minInner = ($newProto or $oldProto or $is16) ? 1 : 2;
 		$len = strlen($str);
 		$offset = 0;
+		// Protocol 23 batches contain a raw concatenation of [pid][payload]
+		// packets, with no per-packet length prefixes. Decode each packet using
+		// its legacy adapter and retain the same bounds/forward-progress guard.
+		if($family === 5 or ($p->getProtocol() === null and $len > 0 and (ord($str[0]) === 0x82 or ord($str[0]) === 0xb1))){
+			while($offset < $len){
+				$pk = MultiProtocol::decodeIncoming11(substr($str, $offset));
+				if($pk === null){
+					return;
+				}
+				$consumed = $pk->getOffset();
+				if($consumed <= 0 or $consumed > $len - $offset){
+					return;
+				}
+				$p->handleDataPacket($pk);
+				$offset += $consumed;
+			}
+			return;
+		}
 		try {
 			while ($offset < $len) {
 				//The inner packet length is attacker-controlled data. Without

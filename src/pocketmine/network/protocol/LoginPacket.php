@@ -58,6 +58,17 @@ class LoginPacket extends DataPacket{
 		$this->username = $this->getString();
 		$this->protocol1 = $this->getInt();
 		$this->protocol2 = $this->getInt();
+		if(\pocketmine\network\MultiProtocol::is011Protocol($this->protocol1)){
+			//0.11.x (protocol 20-33) login: clientId is int32; UUID and skinName were not sent.
+			$this->clientId = $this->getInt();
+			$this->slim = $this->getByte() > 0;
+			$this->skinName = $this->slim ? "CustomSlim" : "Standard_Custom";
+			$this->skin = $this->getString();
+			$this->clientUUID = UUID::fromRandom();
+			$this->serverAddress = "";
+			$this->clientSecret = "";
+			return;
+		}
 		if($this->protocol1 < 38){
 			if($this->protocol1 === 34){
 				//0.12.1 (protocol 34): full login fields like 0.13.1+, but a 1-byte

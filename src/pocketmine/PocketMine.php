@@ -75,7 +75,7 @@ namespace pocketmine {
 	const VERSION = "1.1";
 	const API_VERSION = "2.0.0";
 	const CODENAME = "Ikaros";
-	const MINECRAFT_VERSION = "v0.13.x ~ v0.15.x alpha"; //0.16 翻译层已写好但暂时禁用接入(见 Info::ACCEPTED_PROTOCOLS)
+	const MINECRAFT_VERSION = "v0.11.x ~ v0.16.x alpha"; //0.11=协议23(family 5), 0.12=34, 0.13=37-39, 0.14=45-70(原生), 0.15=81-83, 0.16=90/91
 	const MINECRAFT_VERSION_NETWORK = "0.14.3";
 	const GENISYS_API_VERSION = '1.7.3';
 

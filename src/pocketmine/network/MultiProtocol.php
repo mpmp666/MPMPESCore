@@ -27,7 +27,9 @@ use pocketmine\item\Item;
 use pocketmine\network\protocol\AvailableCommandsPacket;
 use pocketmine\network\protocol\CommandStepPacket;
 use pocketmine\network\protocol\CraftingDataPacket;
+use pocketmine\network\protocol\ContainerSetContentPacket;
 use pocketmine\network\protocol\DataPacket;
+use pocketmine\network\protocol\FullChunkDataPacket;
 use pocketmine\network\protocol\Info;
 use pocketmine\network\protocol\ResourcePacksInfoPacket;
 use pocketmine\Server;
@@ -48,6 +50,64 @@ class MultiProtocol{
 
 	/** First protocol version of the 0.16.x family (0.16.0/0.16.1=90, 0.16.2=91) */
 	const PROTOCOL_0_16 = 90;
+
+	/** MCPE 0.11.x protocol range (Steadfast2-011 reports 23; 0.11 builds span 21-33) */
+	const PROTOCOL_0_11 = 23;
+	const PROTOCOL_0_11_MIN = 21;
+	const PROTOCOL_0_11_MAX = 33;
+
+	/** 0.11 (protocol 23) packet ID => native 0.14 packet ID */
+	private static $toServer11 = [
+		0x82 => 0x8f, //LOGIN
+		0x83 => 0x90, //PLAY_STATUS
+		0x84 => 0x91, //DISCONNECT
+		0x85 => 0x93, //TEXT
+		0x86 => 0x94, //SET_TIME
+		0x87 => 0x95, //START_GAME
+		0x88 => 0x96, //ADD_PLAYER
+		0x89 => 0x97, //REMOVE_PLAYER
+		0x8a => 0x98, //ADD_ENTITY
+		0x8b => 0x99, //REMOVE_ENTITY
+		0x8c => 0x9a, //ADD_ITEM_ENTITY
+		0x8d => 0x9b, //TAKE_ITEM_ENTITY
+		0x8e => 0x9c, //MOVE_ENTITY
+		0x8f => 0x9d, //MOVE_PLAYER
+		0x90 => 0x9e, //REMOVE_BLOCK
+		0x91 => 0x9f, //UPDATE_BLOCK
+		0x92 => 0xa0, //ADD_PAINTING
+		0x93 => 0xa1, //EXPLODE
+		0x94 => 0xa2, //LEVEL_EVENT
+		0x95 => 0xa3, //TILE_EVENT -> BLOCK_EVENT
+		0x96 => 0xa4, //ENTITY_EVENT
+		0x97 => 0xa5, //MOB_EFFECT
+		0x98 => 0xa7, //MOB_EQUIPMENT
+		0x99 => 0xa8, //MOB_ARMOR_EQUIPMENT
+		0x9a => 0xa9, //INTERACT
+		0x9b => 0xaa, //USE_ITEM
+		0x9c => 0xab, //PLAYER_ACTION
+		0x9d => 0xac, //HURT_ARMOR
+		0x9e => 0xad, //SET_ENTITY_DATA
+		0x9f => 0xae, //SET_ENTITY_MOTION
+		0xa0 => 0xaf, //SET_ENTITY_LINK
+		0xa1 => 0xb0, //SET_HEALTH
+		0xa2 => 0xb1, //SET_SPAWN_POSITION
+		0xa3 => 0xb2, //ANIMATE
+		0xa4 => 0xb3, //RESPAWN
+		0xa5 => 0xb4, //DROP_ITEM
+		0xa6 => 0xb5, //CONTAINER_OPEN
+		0xa7 => 0xb6, //CONTAINER_CLOSE
+		0xa8 => 0xb7, //CONTAINER_SET_SLOT
+		0xa9 => 0xb8, //CONTAINER_SET_DATA
+		0xaa => 0xb9, //CONTAINER_SET_CONTENT
+		0xac => 0xbc, //ADVENTURE_SETTINGS
+		0xad => 0xbd, //BLOCK_ENTITY_DATA
+		0xaf => 0xbf, //FULL_CHUNK_DATA
+		0xb0 => 0xc0, //SET_DIFFICULTY
+		0xb1 => 0x92, //BATCH
+	];
+
+	/** Native 0.14 packet ID => 0.11 protocol 23 packet ID */
+	private static $toClient11 = null;
 
 	/** 0.13 客户端不认识的 0.14 新增物品/方块 id(出现在创造背包/配方里会让 0.13 崩溃) */
 	public static $oldProtocolUnknownItems = [23, 125, 154, 165, 179, 180, 182, 356, 380, 389, 395, 461, 462];
@@ -90,6 +150,24 @@ class MultiProtocol{
 	 */
 	public static function is012ProtocolCreativeItem($itemId){
 		return in_array($itemId, self::$oldProtocolCreativeItems12, true);
+	}
+
+	/**
+	 * 0.11 官方创造栏精确清单 (id:meta 对, 提取自 Steadfast2-011 Item::initCreativeItems)。
+	 * 0.11 客户端打开创造背包时会校验每个条目, 下发它不认识的 id/meta 组合会直接闪退。
+	 */
+	public static $creativeItems11 = ['4:0','98:0','98:1','98:2','98:3','48:0','5:0','5:1','5:2','5:3','5:4','5:5','45:0','1:0','1:1','1:2','1:3','1:4','1:5','1:6','3:0','243:0','2:0','110:0','82:0','172:0','159:0','159:7','159:6','159:5','159:4','159:3','159:2','159:1','159:15','159:14','159:13','159:12','159:11','159:10','159:9','159:8','24:0','24:1','24:2','12:0','12:1','13:0','17:0','17:1','17:2','17:3','162:0','162:1','112:0','87:0','7:0','67:0','53:0','134:0','135:0','136:0','163:0','164:0','108:0','128:0','109:0','114:0','156:0','44:0','44:1','158:0','158:1','158:2','158:3','158:4','158:5','44:3','44:4','44:5','44:6','155:0','155:1','155:2','16:0','15:0','14:0','56:0','21:0','73:0','129:0','49:0','79:0','80:0','121:0','139:0','139:1','41:0','42:0','57:0','22:0','173:0','133:0','152:0','78:0','20:0','89:0','106:0','247:0','65:0','19:0','102:0','324:0','96:0','85:0','85:1','85:2','85:3','85:4','85:5','107:0','184:0','183:0','186:0','185:0','187:0','101:0','355:0','47:0','321:0','58:0','245:0','54:0','61:0','120:0','37:0','38:0','39:0','40:0','81:0','103:0','86:0','91:0','30:0','170:0','31:1','31:2','32:0','6:0','6:1','6:2','6:3','6:4','6:5','18:0','18:1','18:2','18:3','161:0','161:1','354:0','323:0','52:0','35:0','35:7','35:6','35:5','35:4','35:3','35:2','35:1','35:15','35:14','35:13','35:12','35:11','35:10','35:9','35:8','171:0','171:7','171:6','171:5','171:4','171:3','171:2','171:1','171:15','171:14','171:13','171:12','171:11','171:10','171:9','171:8','50:0','325:0','325:1','325:8','325:10','46:0','292:0','256:0','267:0','261:0','359:0','259:0','347:0','345:0','328:0','383:10','383:11','383:12','383:13','338:0','296:0','295:0','362:0','361:0','391:0','392:0','458:0','344:0','349:0','349:1','349:2','349:3','350:0','350:1','351:0','351:7','351:6','351:5','351:4','351:3','351:2','351:1','351:15','351:14','351:13','351:12','351:11','351:10','351:9','351:8'];
+
+	private static $creativeSet11 = null;
+
+	/**
+	 * 0.11 创造栏过滤: 只保留 0.11 官方创造栏里精确存在的 (id, meta) 组合。
+	 */
+	public static function is011CreativeItem($itemId, $meta = 0){
+		if(self::$creativeSet11 === null){
+			self::$creativeSet11 = array_fill_keys(self::$creativeItems11, true);
+		}
+		return isset(self::$creativeSet11[$itemId . ":" . $meta]);
 	}
 
 	/** 0.14 (protocol 70) packet id => 0.15 (protocol 81) packet id */
@@ -244,6 +322,9 @@ class MultiProtocol{
 		if($protocol === null){
 			return 0;
 		}
+		if(self::is011Protocol($protocol)){
+			return 5;
+		}
 		if($protocol >= self::PROTOCOL_0_16){
 			return 3;
 		}
@@ -314,6 +395,24 @@ class MultiProtocol{
 		return $protocol !== null and $protocol === self::PROTOCOL_0_12;
 	}
 
+	/** Whether the given client is MCPE 0.11.x (protocol 20-33). */
+	public static function is011Protocol($protocol){
+		return $protocol !== null and $protocol >= self::PROTOCOL_0_11_MIN and $protocol <= self::PROTOCOL_0_11_MAX;
+	}
+
+	/** Native 0.14 packet ID to 0.11 protocol-23 packet ID. */
+	public static function toClientPid11($pid){
+		if(self::$toClient11 === null){
+			self::$toClient11 = array_flip(self::$toServer11);
+		}
+		return isset(self::$toClient11[$pid]) ? self::$toClient11[$pid] : null;
+	}
+
+	/** 0.11 protocol-23 packet ID to native 0.14 packet ID. */
+	public static function toServerPid11($pid){
+		return isset(self::$toServer11[$pid]) ? self::$toServer11[$pid] : null;
+	}
+
 	/**
 	 * Maps a 0.14-native packet id to its 0.15 counterpart, or null if the
 	 * packet does not exist in 0.15 (caller should drop it for 0.15 clients).
@@ -359,6 +458,9 @@ class MultiProtocol{
 		if($family === 4){
 			return self::translateOutgoing12($packet);
 		}
+		if($family === 5){
+			return self::translateOutgoing11($packet);
+		}
 		//family 0 (native 0.14.x): 0.16-only virtual packets must never reach it
 		if($packet instanceof DataPacket){
 			if($packet::NETWORK_ID >= 0xec){
@@ -387,7 +489,7 @@ class MultiProtocol{
 		if($family === 1 or $family === 3){
 			return "\xfe";
 		}
-		return ($family === 2 or $family === 4) ? "" : "\x8e";
+		return ($family === 2 or $family === 4 or $family === 5) ? "" : "\x8e";
 	}
 
 	/**
@@ -406,6 +508,9 @@ class MultiProtocol{
 		}
 		if($family === 4){
 			return "__encapsulatedPacket12";
+		}
+		if($family === 5){
+			return "__encapsulatedPacket11";
 		}
 		return $family === 2 ? "__encapsulatedPacket13" : "__encapsulatedPacket";
 	}
@@ -772,6 +877,228 @@ class MultiProtocol{
 		$nbt = $item->getCompoundTag();
 		return Binary::writeShort($item->getId()) . chr($item->getCount()) .
 			Binary::writeShort($item->getDamage()) . Binary::writeLShort(strlen($nbt)) . $nbt;
+	}
+
+	/** Encode a legacy protocol-23 item slot (id, count, damage; no NBT). */
+	private static function slot11($item){
+		if($item instanceof Item){
+			$id = $item->getId();
+			$count = $item->getCount();
+			$damage = $item->getDamage();
+		}else{
+			$id = 0; $count = 0; $damage = 0;
+		}
+		return Binary::writeShort($id) . chr($count & 0xff) . Binary::writeShort($damage);
+	}
+
+	/**
+	 * Block IDs known to the MCPE 0.11 client. Any block not in this set is
+	 * replaced with air (0) in the chunk data sent to 0.11 clients to prevent
+	 * invisible/crashing blocks.
+	 */
+	private static $blocks11 = null;
+	private static function getBlock11Whitelist(){
+		if(self::$blocks11 === null){
+			self::$blocks11 = array_fill_keys([
+				0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,24,26,
+				27,28,30,31,32,35,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,
+				52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,
+				73,74,75,76,77,78,79,80,81,82,83,85,86,87,88,89,90,91,92,93,94,
+				95,96,98,101,102,103,104,105,106,107,108,109,110,111,112,113,114,
+				116,120,121,122,123,124,125,126,127,128,129,131,133,134,135,136,
+				139,141,142,143,145,146,147,148,151,152,153,155,156,157,158,159,
+				163,164,167,170,171,172,173,175,183,184,185,186,187,198,243,244,
+				245,246,247
+			], true);
+		}
+		return self::$blocks11;
+	}
+
+	/** Convert a native 0.14 FullChunkData packet to the protocol-23 format. */
+	private static function chunk11FromNative($buf){
+		if(strlen($buf) < 14){
+			return "";
+		}
+		$x = Binary::readInt(substr($buf, 1, 4));
+		$z = Binary::readInt(substr($buf, 5, 4));
+		$order = ord($buf[9]);
+		$length = Binary::readInt(substr($buf, 10, 4));
+		$data = substr($buf, 14, max(0, $length));
+		$ids = $data;
+		$meta = ""; $sky = ""; $light = ""; $biomes = ""; $colors = ""; $tiles = "";
+		if($order === FullChunkDataPacket::ORDER_LAYERED and strlen($data) >= 83200){
+			$ids0 = substr($data, 0, 32768);
+			$meta0 = substr($data, 32768, 16384);
+			$sky0 = substr($data, 49152, 16384);
+			$light0 = substr($data, 65536, 16384);
+			$heightOffset = 81920;
+			$heightmap0 = substr($data, $heightOffset, 256);
+			$colors0 = substr($data, $heightOffset + 256, 1024);
+			// The 256-byte field before biome colors is the height map (0-127) on
+			// the 0.11.x release clients (protocol 27). Sending biome ids there makes
+			// the client believe the ground is only ~20 blocks high, so players spawn
+			// in mid-air and keep falling.
+			$biomes = $heightmap0;
+			// Protocol 27 (0.11.x release) consumes the chunk payload in the same
+			// y-major (layered) order the core already produces, so pass the arrays
+			// through unchanged (only filtering block ids 0.11 does not know).
+			$whitelist = self::getBlock11Whitelist();
+			$filtered = "";
+			for($i = 0; $i < 32768; ++$i){
+				$bid = ord($ids0[$i]);
+				$filtered .= isset($whitelist[$bid]) ? $ids0[$i] : "\x00";
+			}
+			$ids = $filtered; $meta = $meta0; $sky = $sky0; $light = $light0; $colors = $colors0;
+			$extraOffset = $heightOffset + 256 + 1024;
+			if(strlen($data) >= $extraOffset + 4){
+				$count = Binary::readLInt(substr($data, $extraOffset, 4));
+				$extraOffset += 4 + max(0, $count) * 6;
+				$tiles = $extraOffset <= strlen($data) ? substr($data, $extraOffset) : "";
+			}
+		}elseif(strlen($data) >= 83200){
+			// ORDER_COLUMNS: blocks already in column order (x,z,y) from McRegion/LevelDB.
+			$ids0 = substr($data, 0, 32768);
+			$meta = substr($data, 32768, 16384);
+			$sky = substr($data, 49152, 16384);
+			$light = substr($data, 65536, 16384);
+			$colors = substr($data, 81920 + 256, 1024);
+			$biomes = substr($data, 81920, 256); // height map (0.11.x release layout)
+			// Filter unknown block IDs
+			$whitelist = self::getBlock11Whitelist();
+			$filtered = "";
+			for($i = 0; $i < 32768; ++$i){
+				$bid = ord($ids0[$i]);
+				$filtered .= isset($whitelist[$bid]) ? $ids0[$i] : "\x00";
+			}
+			$ids = $filtered;
+			$extraOffset = 81920 + 256 + 1024;
+			if(strlen($data) >= $extraOffset + 4){
+				$count = Binary::readLInt(substr($data, $extraOffset, 4));
+				$extraOffset += 4 + max(0, $count) * 6;
+				$tiles = $extraOffset <= strlen($data) ? substr($data, $extraOffset) : "";
+			}
+		}else{
+			$colors = str_repeat("\x00", 1024);
+			$biomes = str_repeat("\x00", 256);
+		}
+		$body = $ids . $meta . $sky . $light . $biomes . $colors . $tiles;
+		if(self::$chunk11Raw){
+			// Protocol 27 (0.11.x release) variant: the chunk payload is sent
+			// uncompressed with no inner x/z prefix; the batch layer compresses it.
+			$inner = $body;
+			$compressed = $body;
+		}else{
+			$inner = Binary::writeLInt($x) . Binary::writeLInt($z) . $body;
+			$compressed = @zlib_encode($inner, ZLIB_ENCODING_DEFLATE, Server::getInstance()->networkCompressionLevel);
+			if($compressed === false){
+				$compressed = @zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 1);
+			}
+		}
+		return chr(0xaf) . Binary::writeInt($x) . Binary::writeInt($z) . Binary::writeInt(strlen($compressed)) . $compressed;
+	}
+
+	/** true = send protocol-27 chunk bodies raw (no zlib / no x-z prefix). */
+	private static $chunk11Raw = true;
+
+	/** Translate a native packet to the MCPE 0.11/protocol-23 wire layout. */
+	public static function translateOutgoing11($packet){
+		if($packet instanceof DataPacket){
+			if(!$packet->isEncoded){
+				$packet->encode();
+			}
+			$buf = $packet->buffer;
+			$pid = $packet::NETWORK_ID;
+		}else{
+			$buf = $packet;
+			$pid = strlen($buf) > 0 ? ord($buf[0]) : -1;
+		}
+		if($pid === Info::FULL_CHUNK_DATA_PACKET){
+			$chunk = self::chunk11FromNative($buf);
+			return $chunk === "" ? [] : [$chunk];
+		}
+		$mapped = self::toClientPid11($pid);
+		if($mapped === null){
+			return [];
+		}
+		if(!$packet instanceof DataPacket){
+			return [chr($mapped) . substr($buf, 1)];
+		}
+		switch($pid){
+			case Info::BATCH_PACKET:
+				$length = strlen($buf) >= 5 ? Binary::readInt(substr($buf, 1, 4)) : 0;
+				return [chr(0xb1) . Binary::writeInt($length) . substr($buf, 5, max(0, $length))];
+			case Info::TEXT_PACKET:
+				//0.11 has no TYPE_SYSTEM(5); POPUP carries message only (no source).
+				$type = $packet->type;
+				if($type === 5){ $type = 0; }
+				$out = chr(0x85) . chr($type);
+				if($type === 1){ //CHAT: source + message
+					$out .= Binary::writeShort(strlen($packet->source)) . $packet->source;
+					$out .= Binary::writeShort(strlen($packet->message)) . $packet->message;
+				}elseif($type === 2){ //TRANSLATION: message + count + params
+					$out .= Binary::writeShort(strlen($packet->message)) . $packet->message;
+					$out .= chr(count($packet->parameters));
+					foreach($packet->parameters as $p){
+						$out .= Binary::writeShort(strlen($p)) . $p;
+					}
+				}else{ //RAW/POPUP/TIP: message only
+					$out .= Binary::writeShort(strlen($packet->message)) . $packet->message;
+				}
+				return [$out];
+			case Info::START_GAME_PACKET:
+				return [chr(0x87) . Binary::writeInt($packet->seed) . Binary::writeInt($packet->generator) . Binary::writeInt($packet->gamemode)
+					. Binary::writeLong($packet->eid) . Binary::writeInt($packet->spawnX) . Binary::writeInt($packet->spawnY) . Binary::writeInt($packet->spawnZ)
+					. Binary::writeFloat($packet->x) . Binary::writeFloat($packet->y) . Binary::writeFloat($packet->z)];
+			case Info::ADD_PLAYER_PACKET:
+				$clientId = $packet->clientID ?? $packet->eid;
+				$item = $packet->item instanceof Item ? $packet->item : Item::get(0, 0, 0);
+				return [chr(0x88) . Binary::writeLong($clientId) . Binary::writeLShort(strlen($packet->username)) . $packet->username
+					. Binary::writeLong($packet->eid) . Binary::writeFloat($packet->x) . Binary::writeFloat($packet->y) . Binary::writeFloat($packet->z)
+					. Binary::writeFloat($packet->speedX) . Binary::writeFloat($packet->speedY) . Binary::writeFloat($packet->speedZ)
+					. Binary::writeFloat($packet->yaw) . Binary::writeFloat($packet->yaw) . Binary::writeFloat($packet->pitch)
+					. Binary::writeShort($item->getId()) . Binary::writeShort($item->getDamage()) . chr($packet->slim ? 1 : 0)
+					. Binary::writeLShort(strlen($packet->skin)) . $packet->skin . Binary::writeMetadata($packet->metadata)];
+			case Info::REMOVE_PLAYER_PACKET:
+				return [chr(0x89) . Binary::writeLong($packet->eid) . Binary::writeLong($packet->eid)];
+			case Info::ADD_ITEM_ENTITY_PACKET:
+				//0.11 slot is 5 bytes (id, count, damage) with no NBT length/data.
+				$item = $packet->item instanceof Item ? $packet->item : Item::get(0, 0, 0);
+				return [chr(0x8c) . Binary::writeLong($packet->eid) . self::slot11($item)
+					. Binary::writeFloat($packet->x) . Binary::writeFloat($packet->y) . Binary::writeFloat($packet->z)
+					. Binary::writeFloat($packet->speedX) . Binary::writeFloat($packet->speedY) . Binary::writeFloat($packet->speedZ)];
+			case Info::SET_TIME_PACKET:
+				return [chr(0x86) . Binary::writeInt((int) (($packet->time / \pocketmine\level\Level::TIME_FULL) * 19200)) . ($packet->started ? "\x80" : "\x00")];
+			case Info::CONTAINER_OPEN_PACKET:
+				return [chr(0xa6) . substr($buf, 1, 16)];
+			case Info::CONTAINER_SET_SLOT_PACKET:
+				$item = $packet->item instanceof Item ? $packet->item : Item::get(0, 0, 0);
+				return [chr(0xa8) . chr($packet->windowid) . Binary::writeShort($packet->slot) . self::slot11($item)];
+			case Info::CONTAINER_SET_CONTENT_PACKET:
+				$out = chr(0xaa) . chr($packet->windowid) . Binary::writeShort(count($packet->slots));
+				foreach($packet->slots as $item){ $out .= self::slot11($item); }
+				if($packet->windowid === ContainerSetContentPacket::SPECIAL_INVENTORY){
+					$out .= Binary::writeShort(count($packet->hotbar));
+					foreach($packet->hotbar as $slot){ $out .= Binary::writeInt($slot); }
+				}
+				return [$out];
+			case Info::MOB_EQUIPMENT_PACKET:
+				$item = $packet->item instanceof Item ? $packet->item : Item::get(0, 0, 0);
+				return [chr(0x98) . Binary::writeLong($packet->eid) . Binary::writeShort($item->getId()) . Binary::writeShort($item->getDamage()) . chr($packet->slot) . chr($packet->selectedSlot)];
+			case Info::MOB_ARMOR_EQUIPMENT_PACKET:
+				$out = chr(0x99) . Binary::writeLong($packet->eid);
+				foreach($packet->slots as $item){ $out .= chr(($item instanceof Item ? $item->getId() : (int) $item) & 0xff); }
+				return [$out];
+			case Info::SET_SPAWN_POSITION_PACKET:
+				return [chr(0xa2) . Binary::writeInt($packet->x) . Binary::writeInt($packet->z) . chr($packet->y & 0xff)];
+			case Info::ADVENTURE_SETTINGS_PACKET:
+				return [chr(0xac) . Binary::writeInt($packet->flags)];
+			case Info::BLOCK_ENTITY_DATA_PACKET:
+				return [chr(0xad) . Binary::writeInt($packet->x) . chr($packet->y & 0xff) . Binary::writeInt($packet->z) . $packet->namedtag];
+			case Info::PLAYER_LIST_PACKET:
+				return [];
+			default:
+				return [chr($mapped) . substr($buf, 1)];
+		}
 	}
 
 	// --------------------------------------------------------------------
@@ -1639,6 +1966,167 @@ class MultiProtocol{
 
 			default:
 				return null; //unmapped / serverbound-only / unsupported: ignore
+		}
+	}
+
+	/** Reads a protocol-23 string (big-endian unsigned short length). */
+	private static function readStr11($b, &$off){
+		$l = strlen($b);
+		if($off + 2 > $l){
+			$off = $l;
+			return "";
+		}
+		$len = Binary::readShort(substr($b, $off, 2));
+		$off += 2;
+		$len = max(0, min($len, $l - $off));
+		$s = substr($b, $off, $len);
+		$off += $len;
+		return $s;
+	}
+
+	/** Reads a protocol-23 item slot (short id, byte count, short damage). */
+	private static function readSlot11($b, &$off){
+		$l = strlen($b);
+		if($off + 5 > $l){
+			$off = $l;
+			return Item::get(0, 0, 0);
+		}
+		$id = Binary::readShort(substr($b, $off, 2)); $off += 2;
+		$count = ord($b[$off++]);
+		$damage = Binary::readShort(substr($b, $off, 2)); $off += 2;
+		return Item::get($id, $damage, $count);
+	}
+
+	/** Marks a manually decoded packet as consumed through $off in $buffer. */
+	private static function finishIncoming11(DataPacket $pk, $buffer, $off){
+		$pk->setBuffer($buffer, min(strlen($buffer), max(1, $off)));
+		$pk->isEncoded = true;
+		return $pk;
+	}
+
+	/**
+	 * Decodes a protocol-23 packet into the native packet object model.
+	 * Protocol 23 uses bare packet IDs and legacy slot/field layouts.
+	 * The returned packet offset is absolute within $buffer so raw batches can
+	 * advance safely without per-packet length prefixes.
+	 */
+	public static function decodeIncoming11($buffer){
+		if(strlen($buffer) < 1){
+			return null;
+		}
+		$pid = ord($buffer[0]);
+		$b = substr($buffer, 1);
+		$off = 0;
+		$l = strlen($b);
+		try{
+			switch($pid){
+				case 0x82: //LOGIN
+					$pk = new \pocketmine\network\protocol\LoginPacket();
+					$pk->setBuffer($buffer, 1);
+					$pk->decode();
+					$pk->isEncoded = true;
+					return $pk;
+				case 0xb1: //BATCH: outer payload has a fixed 4-byte length
+					if($l < 4){ return null; }
+					$size = Binary::readInt(substr($b, 0, 4));
+					if($size < 0 or $size > $l - 4){ return null; }
+					$pk = new \pocketmine\network\protocol\BatchPacket();
+					$pk->payload = substr($b, 4, $size);
+					return self::finishIncoming11($pk, $buffer, 5 + $size);
+				case 0x85: //TEXT
+					$pk = new \pocketmine\network\protocol\TextPacket();
+					$pk->type = $off < $l ? ord($b[$off++]) : 0;
+					if($pk->type === 1){ $pk->source = self::readStr11($b, $off); }
+					if($pk->type === 2){
+						$pk->message = self::readStr11($b, $off);
+						$count = $off < $l ? ord($b[$off++]) : 0;
+						for($i = 0; $i < $count; ++$i){ $pk->parameters[] = self::readStr11($b, $off); }
+					}else{ $pk->message = self::readStr11($b, $off); }
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x8f: //MOVE_PLAYER
+					$pk = new \pocketmine\network\protocol\MovePlayerPacket();
+					$pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					$pk->x = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					$pk->y = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					$pk->z = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					$pk->yaw = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					$pk->bodyYaw = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					$pk->pitch = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					$pk->mode = $off < $l ? ord($b[$off++]) : 0; $pk->onGround = true;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x90: //REMOVE_BLOCK
+					$pk = new \pocketmine\network\protocol\RemoveBlockPacket();
+					$pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					$pk->x = Binary::readInt(substr($b, $off, 4)); $off += 4;
+					$pk->z = Binary::readInt(substr($b, $off, 4)); $off += 4;
+					$pk->y = $off < $l ? ord($b[$off++]) : 0;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x96: //ENTITY_EVENT
+					$pk = new \pocketmine\network\protocol\EntityEventPacket();
+					$pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					$pk->event = $off < $l ? ord($b[$off++]) : 0;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x98: //PLAYER_EQUIPMENT -> native MOB_EQUIPMENT
+					$pk = new \pocketmine\network\protocol\MobEquipmentPacket();
+					$pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					$id = Binary::readShort(substr($b, $off, 2)); $off += 2;
+					$damage = Binary::readShort(substr($b, $off, 2)); $off += 2;
+					$pk->item = Item::get($id, $damage, $id === 0 ? 0 : 1);
+					$pk->slot = $off < $l ? ord($b[$off++]) : 0;
+					$pk->selectedSlot = $off < $l ? ord($b[$off++]) : 0;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x99: //PLAYER_ARMOR_EQUIPMENT
+					$pk = new \pocketmine\network\protocol\MobArmorEquipmentPacket();
+					$pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					for($i = 0; $i < 4; ++$i){ $pk->slots[$i] = Item::get($off < $l ? ord($b[$off++]) : 0, 0, 1); }
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x9a: //INTERACT
+					$pk = new \pocketmine\network\protocol\InteractPacket();
+					$pk->action = $off < $l ? ord($b[$off++]) : 0;
+					$pk->target = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x9b: //USE_ITEM
+					$pk = new \pocketmine\network\protocol\UseItemPacket();
+					$pk->x = Binary::readInt(substr($b, $off, 4)); $off += 4; $pk->y = Binary::readInt(substr($b, $off, 4)); $off += 4; $pk->z = Binary::readInt(substr($b, $off, 4)); $off += 4;
+					$pk->face = $off < $l ? ord($b[$off++]) : 0;
+					$id = Binary::readShort(substr($b, $off, 2)); $off += 2; $damage = Binary::readShort(substr($b, $off, 2)); $off += 2;
+					$pk->item = Item::get($id, $damage, $id === 0 ? 0 : 1); $pk->slot = -1; $pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					$pk->fx = Binary::readFloat(substr($b, $off, 4)); $off += 4; $pk->fy = Binary::readFloat(substr($b, $off, 4)); $off += 4; $pk->fz = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					$pk->posX = Binary::readFloat(substr($b, $off, 4)); $off += 4; $pk->posY = Binary::readFloat(substr($b, $off, 4)); $off += 4; $pk->posZ = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x9c: //PLAYER_ACTION
+					$pk = new \pocketmine\network\protocol\PlayerActionPacket();
+					$pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8; $pk->action = Binary::readInt(substr($b, $off, 4)); $off += 4; $pk->x = Binary::readInt(substr($b, $off, 4)); $off += 4; $pk->y = Binary::readInt(substr($b, $off, 4)); $off += 4; $pk->z = Binary::readInt(substr($b, $off, 4)); $off += 4; $pk->face = Binary::readInt(substr($b, $off, 4)); $off += 4;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0x9e: //SET_ENTITY_DATA
+					$pk = new \pocketmine\network\protocol\SetEntityDataPacket(); $pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8; $pk->metadata = Binary::readMetadata(substr($b, $off)); $off = $l;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0xa3: //ANIMATE
+					$pk = new \pocketmine\network\protocol\AnimatePacket(); $pk->action = $off < $l ? ord($b[$off++]) : 0; $pk->eid = Binary::readLong(substr($b, $off, 8)); $off += 8;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0xa4: //RESPAWN
+					$pk = new \pocketmine\network\protocol\RespawnPacket(); $pk->x = Binary::readFloat(substr($b, $off, 4)); $off += 4; $pk->y = Binary::readFloat(substr($b, $off, 4)); $off += 4; $pk->z = Binary::readFloat(substr($b, $off, 4)); $off += 4;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0xa5: //DROP_ITEM
+					$pk = new \pocketmine\network\protocol\DropItemPacket(); $pk->type = $off < $l ? ord($b[$off++]) : 0; $pk->item = self::readSlot11($b, $off);
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0xa7: //CONTAINER_CLOSE
+					$pk = new \pocketmine\network\protocol\ContainerClosePacket(); $pk->windowid = $off < $l ? ord($b[$off++]) : 0;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0xa8: //CONTAINER_SET_SLOT
+					$pk = new \pocketmine\network\protocol\ContainerSetSlotPacket(); $pk->windowid = $off < $l ? ord($b[$off++]) : 0; $pk->slot = Binary::readShort(substr($b, $off, 2)); $off += 2; $pk->hotbarSlot = 0; $pk->item = self::readSlot11($b, $off);
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0xa9: //CONTAINER_SET_DATA
+					$pk = new \pocketmine\network\protocol\ContainerSetDataPacket(); $pk->windowid = $off < $l ? ord($b[$off++]) : 0; $pk->property = Binary::readShort(substr($b, $off, 2)); $off += 2; $pk->value = Binary::readShort(substr($b, $off, 2)); $off += 2;
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				case 0xaa: //CONTAINER_SET_CONTENT
+					$pk = new \pocketmine\network\protocol\ContainerSetContentPacket(); $pk->windowid = $off < $l ? ord($b[$off++]) : 0; $count = Binary::readShort(substr($b, $off, 2)); $off += 2; for($i = 0; $i < $count; ++$i){ $pk->slots[$i] = self::readSlot11($b, $off); } if($pk->windowid === 0 and $off + 2 <= $l){ $hc = Binary::readShort(substr($b, $off, 2)); $off += 2; for($i = 0; $i < $hc; ++$i){ $pk->hotbar[$i] = Binary::readInt(substr($b, $off, 4)); $off += 4; } }
+					return self::finishIncoming11($pk, $buffer, 1 + $off);
+				default:
+					return null;
+			}
+		}catch(\Throwable $e){
+			return null;
 		}
 	}
 

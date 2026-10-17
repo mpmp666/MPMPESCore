@@ -33,6 +33,10 @@ class AddPlayerPacket extends DataPacket{
 
 	public $uuid;
 	public $username;
+	/** Legacy protocol 23 client ID, defaulting to the entity ID. */
+	public $clientID;
+	public $skin = "";
+	public $slim = false;
 	public $eid;
 	public $x;
 	public $y;
