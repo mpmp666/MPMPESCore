@@ -1,28 +1,8 @@
 <?php
 
-/*
- *
- *  ____            _        _   __  __ _                  __  __ ____
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
- * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * @author PocketMine Team
- * @link http://www.pocketmine.net/
- *
- *
-*/
-
 namespace pocketmine\inventory;
 
 use pocketmine\item\Dye;
-use pocketmine\item\EnchantedBook;
 use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\enchantment\EnchantmentEntry;
 use pocketmine\item\enchantment\EnchantmentLevelTable;
@@ -31,268 +11,168 @@ use pocketmine\item\Item;
 use pocketmine\level\Level;
 use pocketmine\network\protocol\CraftingDataPacket;
 use pocketmine\Player;
-use pocketmine\Server;
 use pocketmine\tile\EnchantTable;
 
+/** The old client submits the result stack; only the server's seeded offer is accepted. */
 class EnchantInventory extends ContainerInventory{
 	private $bookshelfAmount = 0;
-
 	private $levels = [];
-	/** @var EnchantmentEntry[] */
+	/** @var EnchantmentEntry[]|null */
 	private $entries = null;
+	/** @var Item|null */
+	private $offerItem = null;
+	private $enchantmentSeed = null;
+	private $enchanting = false;
+	private $owner = null;
+	/** Player seeds survive closing/reopening a menu while the player is connected. */
+	private static $playerSeeds = null;
 
-	public function __construct(EnchantTable $tile){
-		parent::__construct($tile, InventoryType::get(InventoryType::ENCHANT_TABLE));
-	}
+	public function __construct(EnchantTable $tile){ parent::__construct($tile, InventoryType::get(InventoryType::ENCHANT_TABLE)); }
+	public function getHolder(){ return $this->holder; }
 
-	/**
-	 * @return EnchantTable
-	 */
-	public function getHolder(){
-		return $this->holder;
+	public function open(Player $who){
+		if($this->owner !== null && $this->owner !== $who){ return false; }
+		return parent::open($who);
 	}
 
 	public function onOpen(Player $who){
+		$this->owner = $who;
+		if(self::$playerSeeds === null){ self::$playerSeeds = new \WeakMap(); }
+		if(!isset(self::$playerSeeds[$who])){ self::$playerSeeds[$who] = mt_rand(0, 0x7fffffff); }
+		$this->enchantmentSeed = self::$playerSeeds[$who];
 		parent::onOpen($who);
-		if($this->levels == null){
-			$this->bookshelfAmount = $this->countBookshelf();
-
-			if($this->bookshelfAmount < 0){
-				$this->bookshelfAmount = 0;
-			}
-
-			if($this->bookshelfAmount > 15){
-				$this->bookshelfAmount = 15;
-			}
-
-			$base = mt_rand(1, 8) + ($this->bookshelfAmount / 2) + mt_rand(0, $this->bookshelfAmount);
-			$this->levels = [
-				0 => max($base / 3, 1),
-				1 => (($base * 2) / 3 + 1),
-				2 => max($base, $this->bookshelfAmount * 2)
-			];
-		}
-	}
-
-	private function randomFloat($min = 0, $max = 1){
-		return $min + mt_rand() / mt_getrandmax() * ($max - $min);
+		$this->refreshOffers();
 	}
 
 	public function onSlotChange($index, $before){
 		parent::onSlotChange($index, $before);
-
-		if($index == 0){
-			$item = $this->getItem(0);
-			if($item->getId() == Item::AIR){
-				$this->entries = null;
-			}elseif($before->getId() == Item::AIR and !$item->hasEnchantments()){
-				//before enchant
-				if($this->entries == null){
-					$enchantAbility = Enchantment::getEnchantAbility($item);
-					$this->entries = [];
-					for($i = 0; $i < 3; $i++){
-						$result = [];
-
-						$level = $this->levels[$i];
-						$k = $level + mt_rand(0, round(round($enchantAbility / 4) * 2)) + 1;
-						$bonus = ($this->randomFloat() + $this->randomFloat() - 1) * 0.15 + 1;
-						$modifiedLevel = ($k * (1 + $bonus) + 0.5);
-
-						$possible = EnchantmentLevelTable::getPossibleEnchantments($item, $modifiedLevel);
-						$weights = [];
-						$total = 0;
-
-						for($j = 0; $j < count($possible); $j++){
-							$id = $possible[$j]->getId();
-							$weight = Enchantment::getEnchantWeight($id);
-							$weights[$j] = $weight;
-							$total += $weight;
-						}
-
-						$v = mt_rand(1, $total + 1);
-
-						$sum = 0;
-						for($key = 0; $key < count($weights); ++$key){
-							$sum += $weights[$key];
-							if($sum >= $v){
-								$key++;
-								break;
-							}
-						}
-						$key--;
-
-						if(!isset($possible[$key])) return;
-						$enchantment = $possible[$key];
-						$result[] = $enchantment;
-						unset($possible[$key]);
-
-						//Extra enchantment
-						while(count($possible) > 0){
-							$modifiedLevel = round($modifiedLevel / 2);
-							$v = mt_rand(0, 51);
-							if($v <= ($modifiedLevel + 1)){
-
-								$possible = $this->removeConflictEnchantment($enchantment, $possible);
-
-								$weights = [];
-								$total = 0;
-
-								for($j = 0; $j < count($possible); $j++){
-									$id = $possible[$j]->getId();
-									$weight = Enchantment::getEnchantWeight($id);
-									$weights[$j] = $weight;
-									$total += $weight;
-								}
-
-								$v = mt_rand(1, $total + 1);
-								$sum = 0;
-								for($key = 0; $key < count($weights); ++$key){
-									$sum += $weights[$key];
-									if($sum >= $v){
-										$key++;
-										break;
-									}
-								}
-								$key--;
-
-								$enchantment = $possible[$key];
-								$result[] = $enchantment;
-								unset($possible[$key]);
-							}else{
-								break;
-							}
-						}
-
-						$this->entries[$i] = new EnchantmentEntry($result, $level, Enchantment::generateName());
-					}
-
-					$this->sendEnchantmentList();
-				}
-			}
-		}
+		if((int) $index === 0 && !$this->enchanting){ $this->refreshOffers(); }
 	}
 
-	public function onClose(Player $who){
-		parent::onClose($who);
+	private function ensureSeed(){ if($this->enchantmentSeed === null){ $this->enchantmentSeed = mt_rand(0, 0x7fffffff); } }
+	public function getEnchantmentSeed() : int{ $this->ensureSeed(); return $this->enchantmentSeed; }
 
-		$level = $this->getHolder()->getLevel();
-		for($i = 0; $i < 2; ++$i){
-			if($level instanceof Level) $level->dropItem($this->getHolder()->add(0.5, 0.5, 0.5), $this->getItem($i));
-			$this->clear($i);
-		}
-
-		if(count($this->getViewers()) == 0){
-			$this->levels = null;
-			$this->entries = null;
-			$this->bookshelfAmount = 0;
-		}
+	private function refreshOffers(){
+		$this->ensureSeed();
+		$this->bookshelfAmount = max(0, min(15, $this->countBookshelf()));
+		$item = $this->getItem(0);
+		$this->offerItem = self::copyItem($item);
+		$this->entries = EnchantmentLevelTable::generateOffers($item, $this->bookshelfAmount, $this->enchantmentSeed);
+		$this->levels = [];
+		foreach($this->entries as $slot => $entry){ $this->levels[$slot] = $entry->getCost(); }
+		$this->sendEnchantmentList();
 	}
 
-	/**
-	 * @param Enchantment[] $ent1
-	 * @param Enchantment[] $ent2
-	 *
-	 * @return bool
-	 */
+	/** Exposed as immutable snapshots for integrations and deterministic fixture tests. */
+	public function getEnchantmentEntries() : array{
+		$result = [];
+		foreach($this->entries ?? [] as $slot => $entry){ $result[$slot] = new EnchantmentEntry($entry->getEnchantments(), $entry->getCost(), $entry->getRandomName(), $entry->getResourceCost()); }
+		return $result;
+	}
+
+	/** Exact multiset comparison, rejecting missing, extra, and duplicate enchantments. */
 	public function checkEnts(array $ent1, array $ent2){
-		foreach($ent1 as $enchantment){
-			$hasResult = false;
-			foreach($ent2 as $enchantment1){
-				if($enchantment->equals($enchantment1)){
-					$hasResult = true;
-					continue;
-				}
-			}
-			if(!$hasResult){
-				return false;
-			}
-		}
-		return true;
+		if(count($ent1) !== count($ent2)){ return false; }
+		$left = []; $right = [];
+		foreach($ent1 as $e){ if(!$e instanceof Enchantment || isset($left[$e->getId()])){ return false; } $left[$e->getId()] = $e->getLevel(); }
+		foreach($ent2 as $e){ if(!$e instanceof Enchantment || isset($right[$e->getId()])){ return false; } $right[$e->getId()] = $e->getLevel(); }
+		ksort($left); ksort($right);
+		return $left === $right;
 	}
 
+	/** Returns true only after applying one exact offer and paying its option cost. */
 	public function onEnchant(Player $who, Item $before, Item $after){
-		$result = ($before->getId() == Item::BOOK) ? new EnchantedBook() : $before;
-		if(!$before->hasEnchantments() and $after->hasEnchantments() and $after->getId() == $result->getId() and
-			$this->levels != null and $this->entries != null
-		){
-			$enchantments = $after->getEnchantments();
-			for($i = 0; $i < 3; $i++){
-				if($this->checkEnts($enchantments, $this->entries[$i]->getEnchantments())){
-					$lapis = $this->getItem(1);
-					$level = $who->getExpLevel();
-					$cost = $this->entries[$i]->getCost();
-					if($lapis->getId() == Item::DYE and $lapis->getDamage() == Dye::BLUE and $lapis->getCount() > $i and $level >= $cost){
-						foreach($enchantments as $enchantment){
-							$result->addEnchantment($enchantment);
-						}
-						$this->setItem(0, $result);
-						$lapis->setCount($lapis->getCount() - $i - 1);
-						$this->setItem(1, $lapis);
-						$who->setExpLevel($level - $i - 1);
-						break;
-					}
-				}
-			}
+		$current = $this->getItem(0);
+		if($who->isSpectator() || ($this->owner !== null && $this->owner !== $who) || $this->enchanting || $current->getCount() !== 1 || $current->hasEnchantments() || !self::sameItem($before, $current) || $this->offerItem === null || !self::sameItem($current, $this->offerItem)){
+			return $this->reject($who);
 		}
+		if($this->bookshelfAmount !== max(0, min(15, $this->countBookshelf()))){ $this->refreshOffers(); return $this->reject($who); }
+		// Recompute, so plugins cannot mutate the issued entry objects into a different result.
+		$offers = EnchantmentLevelTable::generateOffers($current, $this->bookshelfAmount, $this->getEnchantmentSeed());
+		foreach($offers as $option => $entry){
+			$enchants = $entry->getEnchantments();
+			if($entry->getCost() <= 0 || count($enchants) === 0 || !$this->checkEnts($after->getEnchantments(), $enchants)){ continue; }
+			$result = $current->getId() === Item::BOOK ? Item::get(Item::ENCHANTED_BOOK, 0, 1, $current->getCompoundTag()) : self::copyItem($current);
+			foreach($enchants as $enchantment){ $result->addEnchantment($enchantment); }
+			if(!self::sameItem($result, $after)){ continue; }
+			$lapis = $this->getItem(1);
+			$level = $who->getExpLevel();
+			$cost = $option + 1;
+			if(!$who->isCreative() && ($level < $entry->getCost() || $level < $cost || $lapis->getId() !== Item::DYE || $lapis->getDamage() !== Dye::BLUE || $lapis->getCount() < $cost)){ return $this->reject($who); }
+			$this->enchanting = true;
+			try{
+				if(!$who->isCreative() && !$who->setExpLevel($level - $cost)){ return $this->reject($who); }
+				// Experience callbacks may alter the container. Do not spend stale inputs.
+				if(!self::sameItem($current, $this->getItem(0)) || !self::sameItem($lapis, $this->getItem(1))){
+					if(!$who->isCreative()){ $who->setExpLevel($level); }
+					return $this->reject($who);
+				}
+				if(!$who->isCreative()){
+					$lapis->setCount($lapis->getCount() - $cost);
+					$this->setItem(1, $lapis);
+				}
+				$this->setItem(0, $result);
+				$this->enchantmentSeed = mt_rand(0, 0x7fffffff);
+				if(self::$playerSeeds === null){ self::$playerSeeds = new \WeakMap(); }
+				self::$playerSeeds[$who] = $this->enchantmentSeed;
+				$this->entries = null; $this->offerItem = null; $this->levels = [];
+			}finally{ $this->enchanting = false; }
+			$this->refreshOffers();
+			$this->sendContents($who);
+			return true;
+		}
+		return $this->reject($who);
 	}
+
+	private function reject(Player $who){ $this->sendContents($who); $this->sendEnchantmentList(); $who->updateExperience(); return false; }
 
 	public function countBookshelf(){
-		return 15;
-		//TODO: calculate bookshelf around
+		$holder = $this->getHolder(); $level = $holder->getLevel();
+		if(!$level instanceof Level){ return 0; }
+		$count = 0; $x = (int) floor($holder->x); $y = (int) floor($holder->y); $z = (int) floor($holder->z);
+		for($dx = -2; $dx <= 2; ++$dx){
+			for($dz = -2; $dz <= 2; ++$dz){
+				if(abs($dx) !== 2 && abs($dz) !== 2){ continue; }
+				for($dy = 0; $dy <= 1; ++$dy){
+					if($level->getBlockIdAt($x + $dx, $y + $dy, $z + $dz) === Item::BOOKSHELF && $level->getBlockIdAt($x + intdiv($dx, 2), $y + $dy, $z + intdiv($dz, 2)) === Item::AIR && ++$count >= 15){ return 15; }
+				}
+			}
+		}
+		return $count;
 	}
 
 	public function sendEnchantmentList(){
 		$pk = new CraftingDataPacket();
-		if($this->entries != null and $this->levels != null){
-			$list = new EnchantmentList(count($this->entries));
-			for($i = 0; $i < count($this->entries); $i++){
-				$list->setSlot($i, $this->entries[$i]);
-			}
-			$pk->addEnchantList($list);
-		}
-
-		Server::getInstance()->broadcastPacket($this->getViewers(), $pk);
+		$list = new EnchantmentList(count($this->entries ?? []));
+		foreach($this->entries ?? [] as $slot => $entry){ $list->setSlot($slot, $entry); }
+		$pk->addEnchantList($list);
+		foreach($this->getViewers() as $viewer){ $viewer->dataPacket($pk); }
 	}
 
-	/**
-	 * @param Enchantment   $enchantment
-	 * @param Enchantment[] $enchantments
-	 * @return Enchantment[]
-	 */
 	public function removeConflictEnchantment(Enchantment $enchantment, array $enchantments){
-		if(count($enchantments) > 0){
-			foreach($enchantments as $e){
-				$id = $e->getId();
-				if($id == $enchantment->getId()){
-					unset($enchantments[$id]);
-					continue;
-				}
-
-				if($id >= 0 and $id <= 4 and $enchantment->getId() >= 0 and $enchantment->getId() <= 4){
-					//Protection
-					unset($enchantments[$id]);
-					continue;
-				}
-
-				if($id >= 9 and $id <= 14 and $enchantment->getId() >= 9 and $enchantment->getId() <= 14){
-					//Weapon
-					unset($enchantments[$id]);
-					continue;
-				}
-
-				if(($id == Enchantment::TYPE_MINING_SILK_TOUCH and $enchantment->getId() == Enchantment::TYPE_MINING_FORTUNE) or ($id == Enchantment::TYPE_MINING_FORTUNE and $enchantment->getId() == Enchantment::TYPE_MINING_SILK_TOUCH)){
-					//Protection
-					unset($enchantments[$id]);
-					continue;
-				}
-			}
-		}
-		$result = [];
-		if(count($enchantments) > 0){
-			foreach($enchantments as $enchantment){
-				$result[] = $enchantment;
-			}
-		}
-		return $result;
+		return array_values(array_filter($enchantments, function(Enchantment $other) use ($enchantment){ return $enchantment->isCompatibleWith($other); }));
 	}
+
+	public function onClose(Player $who){
+		parent::onClose($who);
+		if($this->owner !== null && $this->owner !== $who){ return; }
+		$level = $this->getHolder()->getLevel();
+		$this->enchanting = true;
+		try{
+			for($slot = 0; $slot < 2; ++$slot){
+				$item = $this->getItem($slot);
+				if($item->getId() !== Item::AIR && $item->getCount() > 0){
+					$this->clear($slot);
+					if($level instanceof Level){ $level->dropItem($this->getHolder()->add(0.5, 0.5, 0.5), $item); }
+				}
+			}
+		}finally{ $this->enchanting = false; }
+		$this->entries = null; $this->offerItem = null; $this->levels = []; $this->bookshelfAmount = 0; $this->enchantmentSeed = null; $this->owner = null;
+	}
+
+	/** Item::deepEquals historically ignores ID/damage on its NBT fallback, so check them explicitly. */
+	private static function sameItem(Item $a, Item $b) : bool{
+		return $a->getId() === $b->getId() && $a->getDamage() === $b->getDamage() && $a->getCount() === $b->getCount() && $a->deepEquals($b);
+	}
+	private static function copyItem(Item $item) : Item{ return Item::get($item->getId(), $item->getDamage(), $item->getCount(), $item->getCompoundTag()); }
 }

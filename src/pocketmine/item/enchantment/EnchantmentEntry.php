@@ -28,25 +28,30 @@ class EnchantmentEntry{
 	private $enchantments;
 	private $cost;
 	private $randomName;
+	private $resourceCost;
 
 	/**
 	 * @param Enchantment[] $enchantments
 	 * @param $cost
 	 * @param $randomName
 	 */
-	public function __construct(array $enchantments, $cost, $randomName){
-		$this->enchantments = $enchantments;
+	public function __construct(array $enchantments, $cost, $randomName, $resourceCost = 1){
+		$this->enchantments = array_map(function(Enchantment $enchantment){ return clone $enchantment; }, $enchantments);
 		$this->cost = (int) $cost;
-		$this->randomName = $randomName;
+		$this->randomName = (string) $randomName;
+		$this->resourceCost = (int) $resourceCost;
 	}
 
 	public function getEnchantments(){
-		return $this->enchantments;
+		return array_map(function(Enchantment $enchantment){ return clone $enchantment; }, $this->enchantments);
 	}
 
 	public function getCost(){
 		return $this->cost;
 	}
+
+	/** Lapis and levels consumed (1, 2, 3), separate from the displayed level requirement. */
+	public function getResourceCost(){ return $this->resourceCost; }
 
 	public function getRandomName(){
 		return $this->randomName;

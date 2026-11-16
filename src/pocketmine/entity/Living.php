@@ -21,6 +21,7 @@
 
 namespace pocketmine\entity;
 use pocketmine\item\enchantment\Enchantment;
+use pocketmine\item\EnchantmentEffects26;
 
 
 use pocketmine\block\Block;
@@ -84,9 +85,7 @@ abstract class Living extends Entity implements Damageable{
 	public abstract function getName();
 
 	public function hasLineOfSight(Entity $entity){
-		//TODO: head height
-		return true;
-		//return $this->getLevel()->rayTraceBlocks(Vector3::createVector($this->x, $this->y + $this->height, $this->z), Vector3::createVector($entity->x, $entity->y + $entity->height, $entity->z)) === null;
+		return \pocketmine\entity\ai\Navigation26::canSee($this, $entity);
 	}
 
 	public function heal($amount, EntityRegainHealthEvent $source){
@@ -99,9 +98,11 @@ abstract class Living extends Entity implements Damageable{
 	}
 
 	public function attack($damage, EntityDamageEvent $source){
+		EnchantmentEffects26::prepareDamage($this, $source);
+		$damage = $source->getFinalDamage();
 		if($this->attackTime > 0 or $this->noDamageTicks > 0){
 			$lastCause = $this->getLastDamageCause();
-			if($lastCause !== null and $lastCause->getDamage() >= $damage){
+			if($lastCause !== null and $lastCause->getFinalDamage() >= $damage){
                 $source->setCancelled();
 			}
 		}
@@ -109,17 +110,13 @@ abstract class Living extends Entity implements Damageable{
         parent::attack($damage, $source);
 
         if($source->isCancelled()){
-            return;
+            return false;
         }
 
-		if($source instanceof EntityDamageByEntityEvent){
+		if($source->getFinalDamage() > 0 and $source instanceof EntityDamageByEntityEvent){
 			$e = $source->getDamager();
 			if($source instanceof EntityDamageByChildEntityEvent){
 				$e = $source->getChild();
-			}
-
-			if($e->isOnFire() > 0){
-				$this->setOnFire(2 * $this->server->getDifficulty());
 			}
 
 			$deltaX = $this->x - $e->x;
@@ -127,12 +124,15 @@ abstract class Living extends Entity implements Damageable{
 			$this->knockBack($e, $damage, $deltaX, $deltaZ, $source->getKnockBack());
 		}
 
+		EnchantmentEffects26::afterDamage($this, $source);
+
 		$pk = new EntityEventPacket();
 		$pk->eid = $this->getId();
 		$pk->event = $this->getHealth() <= 0 ? EntityEventPacket::DEATH_ANIMATION : EntityEventPacket::HURT_ANIMATION; //Ouch!
 		Server::broadcastPacket($this->hasSpawned, $pk);
 
 		$this->attackTime = 10; //0.5 seconds cooldown
+		return true;
 	}
 
 	public function knockBack(Entity $attacker, $damage, $x, $z, $base = 0.4){
@@ -164,26 +164,15 @@ abstract class Living extends Entity implements Damageable{
 			return;
 		}
 		parent::kill();
-		// 抢夺附魔: 提高掉落数量/概率
 		$drops = $this->getDrops();
 		$looting = 0;
 		if($this->lastDamageCause instanceof EntityDamageByEntityEvent){
-			$damager = $this->lastDamageCause->getDamager();
-			if($damager instanceof \pocketmine\Player){
-				$inv = $damager->getInventory();
-				if($inv !== null){
-					$item = $inv->getItemInHand();
-					$looting = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
-				}
+			$weapon = EnchantmentEffects26::heldWeapon($this->lastDamageCause->getDamager());
+			if($weapon !== null){
+				$looting = $weapon->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
 			}
 		}
-		if($looting > 0 and count($drops) > 0){
-			// 每个掉落物数量 +mt_rand(0, looting)
-			foreach($drops as $k => $d){
-				$add = mt_rand(0, $looting);
-				if($add > 0) $drops[$k] = ItemItem::get($d->getId(), $d->getDamage(), $d->getCount() + $add);
-			}
-		}
+		$drops = EnchantmentEffects26::lootingDrops($this, $drops, $looting);
 		$this->server->getPluginManager()->callEvent($ev = new EntityDeathEvent($this, $drops));
 		foreach($ev->getDrops() as $item){
 			$this->getLevel()->dropItem($this, $item);
@@ -207,7 +196,11 @@ abstract class Living extends Entity implements Damageable{
 					$this->setDataProperty(self::DATA_AIR, self::DATA_TYPE_SHORT, 300);
 				}else{
 					$hasUpdate = true;
-					$airTicks = $this->getDataProperty(self::DATA_AIR) - $tickDiff;
+					$airTicks = $this->getDataProperty(self::DATA_AIR);
+					$respiration = EnchantmentEffects26::helmetLevel($this, Enchantment::TYPE_WATER_BREATHING);
+					for($airTick = 0; $airTick < $tickDiff; ++$airTick){
+						if(EnchantmentEffects26::consumeAir($respiration)){ --$airTicks; }
+					}
 					if($airTicks <= -20){
 						$airTicks = 0;
 

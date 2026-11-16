@@ -63,15 +63,7 @@ class Zombie extends Monster{
 	}
 	
 	public function attack($damage, EntityDamageEvent $source){
-		parent::attack($damage, $source);
-		
-		if($source instanceof EntityDamageByEntityEvent){
-			$e = $source->getDamager();
-			
-			$deltaX = $this->x - $e->x;
-			$deltaZ = $this->z - $e->z;
-			$this->knockBack($e, $damage, $deltaX / 100, $deltaZ / 100, $source->getKnockBack());
-		}
+		return parent::attack($damage,$source);
 	}
 
 	
@@ -115,102 +107,7 @@ class Zombie extends Monster{
 	}
 	
 	public function onUpdate($currentTick){
-		if($this->closed !== false){
-			return false;
-		}
-		
-		if($this->getLevel()->getServer()->aiConfig["zombie"] != 2) return parent::onUpdate($currentTick);
-		
-		$this->lastUpdate = $currentTick;
-
-		$this->timings->startTiming();
-
-		$hasUpdate = parent::onUpdate($currentTick);
-
-		if($this->isAlive()){
-			/* Don't use time directly
-			 * Instead, get remainder of current time divided by 24,000
-			 * This tells us the time of day, which is what we really need
-			 */
-			$timeOfDay = abs($level->getTime() % 24000);
-			if(0 < $timeOfDay and $timeOfDay < 13000) $this->setOnFire(2); //僵尸起火
-			
-			$p = $this->getNearestPlayer();//找到最近的可以被仇恨的玩家
-			if(!$p) {
-				$this->hated = false;
-				if(++$this->moveTicker >= 100) {
-					$this->moveDirection = $this->generateRandomDirection();
-					$this->moveTicker = 0;
-				}
-			}else{
-				$this->hated = $p;
-				if($p->distance($this) <= $this->fire_r) $p->setOnFire(2); //点燃玩家
-				if(!$this->tempTicking){
-					if(++$this->hateTicker >= 10 or $this->moveDirection == null) { //每0.5秒获取僵尸前进的新方向
-						$this->moveDirection = $this->generateDirection($p);
-						$this->hateTicker = 0;
-					}
-				}
-			}
-			
-			
-			if($this->tempTicking) { //帮助僵尸寻找新的方向走出困境
-				if(++$this->tempTicker >= 20) {
-					$this->tempTicking = false;
-					$this->tempTicker = 0;
-				}
-			}
-			
-			if($this->hated instanceof Player){ //攻击玩家
-				if($this->hated->distance($this) < $this->attack_r) $this->hated->attack(2, new EntityDamageByEntityEvent($this, $this->hated, EntityDamageEvent::CAUSE_ENTITY_ATTACK, 2));
-			}
-			
-			if($this->moveDirection != null){
-				if($this->motionX ** 2 + $this->motionZ ** 2 <= $this->moveDirection->lengthSquared()){
-					$motionY = $this->getVelY(); //僵尸运动计算
-					if($motionY >= 0){
-						$this->motionX = $this->moveDirection->x * $this->moveSpeed;
-						$this->motionZ = $this->moveDirection->z * $this->moveSpeed;
-						$this->motionY = $motionY;
-					}else{
-						$this->moveDirection = $this->generateRandomDirection(); //生成随机运动方向
-						$this->moveTicker = 0;
-						$this->tempTicking = true;
-					}
-				}
-			}else{
-				$this->moveDirection = $this->generateRandomDirection();
-				$this->moveTicker = 0;
-			}
-			
-			//var_dump($this->moveDirection,$this->motionX,$this->motionZ);
-			
-			$expectedPos = new Vector3($this->x + $this->motionX, $this->y + $this->motionY, $this->z + $this->motionZ);
-			
-			if($this->motionY == 0) $this->motionY -= $this->gravity; //重力计算
-
-			$this->move($this->motionX, $this->motionY, $this->motionZ);
-
-			if($expectedPos->distanceSquared($this) > 0){
-				$this->moveDirection = $this->generateRandomDirection();
-			}
-			
-			$friction = 1 - $this->drag;
-
-			$this->motionX *= $friction;
-			//$this->motionY *= 1 - $this->drag;
-			$this->motionZ *= $friction;
-
-			$f = sqrt(($this->motionX ** 2) + ($this->motionZ ** 2));
-			$this->yaw = (-atan2($this->motionX, $this->motionZ) * 180 / M_PI); //视角计算
-			//$this->pitch = (-atan2($f, $this->motionY) * 180 / M_PI);
-			
-			$this->updateMovement();
-		}
-		
-		$this->timings->stopTiming();
-
-		return $hasUpdate or !$this->onGround or abs($this->motionX) > 0.00001 or abs($this->motionY) > 0.00001 or abs($this->motionZ) > 0.00001;
+		return parent::onUpdate($currentTick);
 	}
 
 	public function spawnTo(Player $player){

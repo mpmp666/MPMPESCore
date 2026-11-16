@@ -454,7 +454,9 @@ class Level implements ChunkManager, Metadatable{
 
 	public function initLevel(){
 		$generator = $this->generator;
-		$this->generatorInstance = new $generator($this->provider->getGeneratorOptions());
+		$options = $this->provider->getGeneratorOptions();
+		$options['structure-settings'] = $this->server->getAdvancedProperty('structures', []);
+		$this->generatorInstance = new $generator($options);
 		$this->generatorInstance->init($this, new Random($this->getSeed()));
 
 		$this->registerGenerator();
@@ -728,7 +730,7 @@ class Level implements ChunkManager, Metadatable{
 			return;
 		}else{
 			// 末地(ender)维度: 时间永远锁定夜晚, 不推进
-			if($this->folderName === "ender"){
+			if($this->generatorInstance instanceof \pocketmine\level\generator\ender\Ender){
 				$this->time = Level::TIME_NIGHT;
 				return;
 			}
@@ -1808,6 +1810,7 @@ class Level implements ChunkManager, Metadatable{
 
 		if($player !== null){
 			$ev = new BlockBreakEvent($player, $target, $item, $player->isCreative() ? true : false);
+			$ev->setDrops($player->isSurvival() ? \pocketmine\item\EnchantmentEffects26::harvestDrops($target, $item) : []);
 
 			if($player->isAdventure() or $player->isSpectator() or ($player->isSurvival() and $item instanceof Item and !$target->isBreakable($item))){
 				$ev->setCancelled();
@@ -1823,25 +1826,10 @@ class Level implements ChunkManager, Metadatable{
 				return false;
 			}
 
-			/*$breakTime = $target->getBreakTime($item);
-
-			if($player->isCreative() and $breakTime > 0.15){
-				$breakTime = 0.15;
-			}
-
-			if($player->hasEffect(Effect::SWIFTNESS)){
-				$breakTime *= 1 - (0.2 * ($player->getEffect(Effect::SWIFTNESS)->getAmplifier() + 1));
-			}
-
-			if($player->hasEffect(Effect::MINING_FATIGUE)){
-				$breakTime *= 1 + (0.3 * ($player->getEffect(Effect::MINING_FATIGUE)->getAmplifier() + 1));
-			}
-
-			$breakTime -= 0.05; //1 tick compensation
-
-			if(!$ev->getInstaBreak() and ($player->lastBreak + $breakTime) > microtime(true)){
+			$breakTime = \pocketmine\item\EnchantmentEffects26::breakTime($target, $item, $player);
+			if(!$ev->getInstaBreak() and ($player->lastBreak === PHP_INT_MAX or $player->lastBreak + max(0, $breakTime - 0.05) > microtime(true))){
 				return false;
-			}*/
+			}
 
 			$player->lastBreak = microtime(true);
 
@@ -1879,10 +1867,7 @@ class Level implements ChunkManager, Metadatable{
 		}elseif($item !== null and !$target->isBreakable($item)){
 			return false;
 		}else{
-			$drops = $target->getDrops($item); //Fixes tile entities being deleted before getting drops
-			foreach($drops as $k => $i){
-				if((isset ($i[0])) && (isset ($i[1])) && (isset ($i[2]))) $drops[$k] = Item::get($i[0], $i[1], $i[2]);
-			}
+			$drops = \pocketmine\item\EnchantmentEffects26::harvestDrops($target, $item);
 		}
 
 		$above = $this->getBlock(new Vector3($target->x, $target->y + 1, $target->z));
@@ -1936,7 +1921,7 @@ class Level implements ChunkManager, Metadatable{
 			$tile->close();
 		}
 
-		if($item !== null){
+		if($item !== null and ($player === null or $player->isSurvival())){
 			$item->useOn($target);
 			if($item->isTool() and $item->getDamage() >= $item->getMaxDurability()){
 				$item = Item::get(Item::AIR, 0, 0);
@@ -2562,8 +2547,9 @@ class Level implements ChunkManager, Metadatable{
 		return $this->getChunk($x, $z, $create);
 	}
 
-	public function generateChunkCallback($x, $z, FullChunk $chunk){
+	public function generateChunkCallback($x, $z, FullChunk $chunk, array $structureData = []){
 		Timings::$generationCallbackTimer->startTiming();
+		$structureApplied = false;
 		if(isset($this->chunkPopulationQueue[$index = Level::chunkHash($x, $z)])){
 			$oldChunk = $this->getChunk($x, $z, false);
 			for($xx = -1; $xx <= 1; ++$xx){
@@ -2575,6 +2561,11 @@ class Level implements ChunkManager, Metadatable{
 			$chunk->setProvider($this->provider);
 			$this->setChunk($x, $z, $chunk, false);
 			$chunk = $this->getChunk($x, $z, false);
+			if($structureData !== []){
+				\pocketmine\level\generator\structure\StructureTiles::apply($this, $structureData['tiles'] ?? []);
+				\pocketmine\level\generator\structure\StructureEntities::apply($this, $structureData['entities'] ?? []);
+				$structureApplied = true;
+			}
 			if($chunk !== null and ($oldChunk === null or $oldChunk->isPopulated() === false) and $chunk->isPopulated() and $chunk->getProvider() !== null){
 				$this->server->getPluginManager()->callEvent(new ChunkPopulateEvent($chunk));
 
@@ -2590,6 +2581,10 @@ class Level implements ChunkManager, Metadatable{
 		}else{
 			$chunk->setProvider($this->provider);
 			$this->setChunk($x, $z, $chunk, false);
+		}
+		if(!$structureApplied && $structureData !== []){
+			\pocketmine\level\generator\structure\StructureTiles::apply($this, $structureData['tiles'] ?? []);
+			\pocketmine\level\generator\structure\StructureEntities::apply($this, $structureData['entities'] ?? []);
 		}
 		Timings::$generationCallbackTimer->stopTiming();
 	}

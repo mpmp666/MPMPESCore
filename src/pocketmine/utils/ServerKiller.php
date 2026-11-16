@@ -27,6 +27,7 @@ class ServerKiller extends Thread{
 
 	public $time;
 	private $deadline;
+	private $cancelled = false;
 
 	public function __construct($time = 15){
 		$this->time = $time;
@@ -35,12 +36,20 @@ class ServerKiller extends Thread{
 
 	/** Real thread body: force-kills the server if shutdown takes too long. */
 	public function onRun(){
-		while(!$this->isTerminated()){
+		while(!$this->cancelled){
 			if(time() >= $this->deadline){
 				echo "\nTook too long to stop, server was killed forcefully!\n";
 				@\pocketmine\kill(getmypid());
 			}
 			sleep(1);
+		}
+	}
+
+	/** A real pmmpthread must finish before PHP request shutdown can return. */
+	public function cancel(){
+		$this->cancelled = true;
+		if(!$this->isJoined()){
+			$this->join();
 		}
 	}
 

@@ -77,6 +77,7 @@ class Normal extends Generator{
 	private static $SMOOTH_SIZE = 2;
 
 	public function __construct(array $options = []){
+		$this->structureOptions = $options;
 		if(self::$GAUSSIAN_KERNEL === null){
 			self::generateKernel();
 		}
@@ -108,7 +109,7 @@ class Normal extends Generator{
 	}
 
 	public function getSettings(){
-		return [];
+		return $this->structureOptions;
 	}
 
 	public function pickBiome($x, $z){

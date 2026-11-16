@@ -24,6 +24,7 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
+use pocketmine\level\Position;
 use pocketmine\math\Vector3;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
@@ -34,7 +35,7 @@ class TeleportCommand extends VanillaCommand{
 		parent::__construct(
 			$name,
 			"%pocketmine.command.tp.description",
-			"%commands.tp.usage"
+			"/tp <player> | /tp <target> <destination> | /tp [target] <x> <y> <z> [yaw pitch] | /tp [target] world <world> [x y z [yaw pitch]]"
 		);
 		$this->setPermission("pocketmine.command.teleport");
 	}
@@ -44,80 +45,76 @@ class TeleportCommand extends VanillaCommand{
 			return true;
 		}
 
-		if(count($args) < 1 or count($args) > 6){
+		try{
+			$request = TeleportArguments::parse($sender, $args);
+		}catch(\InvalidArgumentException $e){
+			$sender->sendMessage(TextFormat::RED . $e->getMessage());
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
-
 			return true;
 		}
 
-		$target = null;
-		$origin = $sender;
-
-		if(count($args) === 1 or count($args) === 3){
-			if($sender instanceof Player){
-				$target = $sender;
+		$target = $request["target"];
+		$destination = $request["destination"];
+		if($destination !== null){
+			// Passing the player preserves the destination's level, yaw and pitch.
+			if($target->teleport($destination) === false){
+				$sender->sendMessage(TextFormat::RED . "Teleport failed for " . $target->getName() . ".");
 			}else{
-				$sender->sendMessage(TextFormat::RED . "Please provide a player!");
-
-				return true;
+				Command::broadcastCommandMessage($sender, new TranslationContainer("commands.tp.success", [$target->getName(), $destination->getName()]));
 			}
-			if(count($args) === 1){
-				$target = $sender->getServer()->getPlayer($args[0]);
-				if($target === null){
-					$sender->sendMessage(TextFormat::RED . "Can't find player " . $args[0]);
+			return true;
+		}
 
+		$level = $target->getLevel();
+		if($request["world"] !== null){
+			$name = $request["world"];
+			$server = $sender->getServer();
+			$level = $server->getLevelByName($name);
+			if($level === null){
+				if(!$server->isLevelGenerated($name)){
+					$sender->sendMessage(TextFormat::RED . ($request["fallback"] ? "Can't find online player or existing world " : "Can't find existing world ") . $name . ".");
+					return true;
+				}
+				try{
+					$loaded = $server->loadLevel($name);
+				}catch(\Throwable $e){
+					$loaded = false;
+				}
+				$level = $loaded ? $server->getLevelByName($name) : null;
+				if($level === null){
+					$sender->sendMessage(TextFormat::RED . "Could not load world " . $name . ".");
 					return true;
 				}
 			}
+		}
+		if($level === null){
+			$sender->sendMessage(TextFormat::RED . "Player " . $target->getName() . " has no world.");
+			return true;
+		}
+
+		if($request["coordinates"] === null){
+			$spawn = $level->getSafeSpawn();
+			if(!($spawn instanceof Vector3) or !is_finite((float) $spawn->x) or !is_finite((float) $spawn->y) or !is_finite((float) $spawn->z)
+				or abs($spawn->x) > self::MAX_COORD or abs($spawn->z) > self::MAX_COORD or $spawn->y < 0 or $spawn->y > 127){
+				$sender->sendMessage(TextFormat::RED . "World " . $request["world"] . " has no valid safe spawn.");
+				return true;
+			}
+			// getSafeSpawn may return a plain Vector3; always bind the destination level.
+			$position = new Position($spawn->x, $spawn->y, $spawn->z, $level);
 		}else{
-			$target = $sender->getServer()->getPlayer($args[0]);
-			if($target === null){
-				$sender->sendMessage(TextFormat::RED . "Can't find player " . $args[0]);
-
-				return true;
-			}
-			if(count($args) === 2){
-				$origin = $target;
-				$target = $sender->getServer()->getPlayer($args[1]);
-				if($target === null){
-					$sender->sendMessage(TextFormat::RED . "Can't find player " . $args[1]);
-
-					return true;
-				}
-			}
+			list($x, $y, $z) = $request["coordinates"];
+			$position = new Position($x, $y, $z, $level);
 		}
-
-		if(count($args) < 3){
-			$origin->teleport($target);
-			Command::broadcastCommandMessage($sender, new TranslationContainer("commands.tp.success", [$origin->getName(), $target->getName()]));
-
-			return true;
-		}elseif($target->getLevel() !== null){
-			if(count($args) === 4 or count($args) === 6){
-				$pos = 1;
-			}else{
-				$pos = 0;
-			}
-
-			$x = $this->getRelativeDouble($target->x, $sender, $args[$pos++]);
-			$y = $this->getRelativeDouble($target->y, $sender, $args[$pos++], 0, 128);
-			$z = $this->getRelativeDouble($target->z, $sender, $args[$pos++]);
-			$yaw = $target->getYaw();
-			$pitch = $target->getPitch();
-
-			if(count($args) === 6 or (count($args) === 5 and $pos === 3)){
-				$yaw = $args[$pos++];
-				$pitch = $args[$pos++];
-			}
-
-			$target->teleport(new Vector3($x, $y, $z), $yaw, $pitch);
-			Command::broadcastCommandMessage($sender, new TranslationContainer("commands.tp.success.coordinates", [$target->getName(), round($x, 2), round($y, 2), round($z, 2)]));
-
+		// Player::teleport queues chunk delivery; do not wait or generate chunks here.
+		if($target->teleport($position, $request["yaw"], $request["pitch"]) === false){
+			$sender->sendMessage(TextFormat::RED . "Teleport failed for " . $target->getName() . ".");
 			return true;
 		}
-
-		$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
-
+		if($request["world"] !== null){
+			Command::broadcastCommandMessage($sender, "Teleported " . $target->getName() . " to world " . $request["world"] . " at " . round($position->x, 2) . ", " . round($position->y, 2) . ", " . round($position->z, 2) . ".");
+		}else{
+			Command::broadcastCommandMessage($sender, new TranslationContainer("commands.tp.success.coordinates", [$target->getName(), round($position->x, 2), round($position->y, 2), round($position->z, 2)]));
+		}
 		return true;
 	}
 }

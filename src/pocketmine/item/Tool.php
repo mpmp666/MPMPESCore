@@ -63,43 +63,38 @@ abstract class Tool extends Item{
 			return true;
 		}
 
-		$unbreakingl = $this->getEnchantmentLevel(Enchantment::TYPE_MINING_DURABILITY);
-		$unbreakingl = $unbreakingl > 3 ? 3 : $unbreakingl;
-		if (mt_rand(1, $unbreakingl + 1) !== 1) {
-			return true;
-		}
 
 		if ($type === 1) {
 			if ($object instanceof Entity) {
 				if ($this->isHoe() !== false or $this->isSword() !== false) {
 					//Hoe and Sword
-					$this->meta++;
+					EnchantmentEffects26::damageItem($this, 1);
 					return true;
 				} elseif ($this->isPickaxe() !== false or $this->isAxe() !== false or $this->isShovel() !== false) {
 					//Pickaxe Axe and Shovel
-					$this->meta += 2;
+					EnchantmentEffects26::damageItem($this, 2);
 					return true;
 				}
 				return true;//Other tool do not lost durability white hitting
 			} elseif ($object instanceof Block) {
 				if ($this->isShears() !== false) {
 					if ($object->getToolType() === Tool::TYPE_SHEARS) {//This should be checked in each block
-						$this->meta++;
+						EnchantmentEffects26::damageItem($this, 1);
 					}
 					return true;
 				} elseif ($object->getHardness() > 0) {//Sword Pickaxe Axe and Shovel
 					if ($this->isSword() !== false) {
-						$this->meta += 2;
+						EnchantmentEffects26::damageItem($this, 2);
 						return true;
 					} elseif ($this->isPickaxe() !== false or $this->isAxe() !== false or $this->isShovel() !== false) {
-						$this->meta += 1;
+						EnchantmentEffects26::damageItem($this, 1);
 						return true;
 					}
 				}
 			}
 		} elseif ($type === 2) {//For Touch. only trigger when OnActivate return true
 			if ($this->isHoe() !== false or $this->id === self::FLINT_STEEL or $this->isShovel() !== false) {
-				$this->meta++;
+				EnchantmentEffects26::damageItem($this, 1);
 				return true;
 			}
 		}

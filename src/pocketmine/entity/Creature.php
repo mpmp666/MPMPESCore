@@ -22,49 +22,95 @@
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\block\Block;
 use pocketmine\level\Level;
 use pocketmine\math\Vector3;
 
 abstract class Creature extends Living{
 	public $attackingTick = 0;
 
-	public function onUpdate($tick){
-		if(!$this instanceof Human){
-			if($this->attackingTick > 0){
-				$this->attackingTick--;
-			}
-			if(!$this->isAlive() and $this->hasSpawned){
-				++$this->deadTicks;
-				if($this->deadTicks >= 20){
-					$this->despawnFromAll();
-				}
-				return true;
-			}
-			if($this->isAlive()){
-
-				$this->motionY -= $this->gravity;
-
-				$this->move($this->motionX, $this->motionY, $this->motionZ);
-
-				$friction = 1 - $this->drag;
-
-				if($this->onGround and (abs($this->motionX) > 0.00001 or abs($this->motionZ) > 0.00001)){
-					$friction = $this->getLevel()->getBlock($this->temporalVector->setComponents((int) floor($this->x), (int) floor($this->y - 1), (int) floor($this->z) - 1))->getFrictionFactor() * $friction;
-				}
-
-				$this->motionX *= $friction;
-				$this->motionY *= 1 - $this->drag;
-				$this->motionZ *= $friction;
-
-				if($this->onGround){
-					$this->motionY *= -0.5;
-				}
-
-				$this->updateMovement();
-			}
+	public function __construct(\pocketmine\level\format\FullChunk $chunk, \pocketmine\nbt\tag\CompoundTag $nbt){
+		$attributes=\pocketmine\entity\ai\MobAttributes26::values($this,$nbt);
+		if($attributes!==null){
+			[$this->width,$this->height,$this->eyeHeight,$health,$this->fireProof]=$attributes;
+			$this->length=$this->width;
+			$this->setMaxHealth($health);
+			if(!isset($nbt->Health)&&!isset($nbt->HealF)){$nbt->Health=new \pocketmine\nbt\tag\ShortTag('Health',$health);}
 		}
-		parent::entityBaseTick();
-		return parent::onUpdate($tick);
+		parent::__construct($chunk,$nbt);
+		if($this instanceof Slime||$this instanceof LavaSlime){
+			$size=max(1,min(127,(int)($nbt['Size']??0)+1));
+			$this->setDataProperty(16,self::DATA_TYPE_BYTE,$size);
+		}
+	}
+
+	/** Refresh collision dimensions when an existing baby grows, without moving it. */
+	public function refreshDimensions26(?bool $baby = null) : void{
+		$attributes=\pocketmine\entity\ai\MobAttributes26::values($this,$this->namedtag,$baby);
+		if($attributes===null){return;}
+		[$this->width,$this->height,$this->eyeHeight]=$attributes;
+		$this->length=$this->width;
+		$half=$this->width/2;
+		$this->boundingBox=new \pocketmine\math\AxisAlignedBB($this->x-$half,$this->y,$this->z-$half,$this->x+$half,$this->y+$this->height,$this->z+$half);
+	}
+
+	public function saveNBT(){
+		if(!($this instanceof Human)){\pocketmine\entity\ai\VanillaAI26::save($this);}
+		parent::saveNBT();
+	}
+
+	/** One living tick and one collision-aware movement step, including idle mobs. */
+	public function onUpdate($tick){
+		// Human/Player has its own physics and must never enter the mob motor.
+		if($this instanceof Human){return parent::onUpdate($tick);}
+		if($this->closed){return false;}
+		if(!$this->isAlive()){
+			\pocketmine\entity\ai\VanillaAI26::forget($this);
+			return parent::onUpdate($tick);
+		}
+		$delta=(int)$tick-(int)$this->lastUpdate;
+		if($delta<=0){return true;}
+		$delta=min(20,$delta);
+		$this->lastUpdate=(int)$tick;
+		$this->timings->startTiming();
+		try{
+			$this->attackingTick=max(0,$this->attackingTick-$delta);
+			// The old path called this both here and through Entity::onUpdate,
+			// advancing fire, air and age twice. Keep exactly one call.
+			$this->entityBaseTick($delta);
+			if($this->closed||!$this->isAlive()){return !$this->closed;}
+			\pocketmine\entity\ai\VanillaAI26::tick($this,$delta);
+			if($this->closed||!$this->isAlive()){return !$this->closed;}
+			$mode=\pocketmine\entity\ai\VanillaAI26::mode($this);
+			$swimming=$mode==='swimming'&&$this->isInsideOfWater();
+			$flying=$mode==='flying';
+			if($swimming){$this->resetFallDistance();}
+			// Never move into a chunk the server has not loaded. Collision lookups
+			// in Entity::move otherwise create/load neighbors as a side effect.
+			$half=max(0.1,(float)$this->width/2)+0.05;
+			$nx=$this->x+$this->motionX;$nz=$this->z+$this->motionZ;
+			$loaded=true;$loadedChunks=$this->level->getChunks();
+			for($cx=((int)floor(min($this->x,$nx)-$half))>>4;$cx<=((int)floor(max($this->x,$nx)+$half))>>4;++$cx){
+				for($cz=((int)floor(min($this->z,$nz)-$half))>>4;$cz<=((int)floor(max($this->z,$nz)+$half))>>4;++$cz){
+					if(!isset($loadedChunks[Level::chunkHash($cx,$cz)])){$loaded=false;break 2;}
+				}
+			}
+			if(!$loaded){$this->motionX=0.0;$this->motionZ=0.0;}
+			$this->move($this->motionX,$this->motionY,$this->motionZ);
+			$friction=$flying?0.91:($swimming?0.9:0.91);
+			if($this->onGround&&!$flying&&!$swimming){
+				$state=$this->level->getFullStateAt((int)floor($this->x),(int)floor($this->y-0.01),(int)floor($this->z));
+				$friction=Block::get($state>>4,$state&15)->getFrictionFactor()*0.91;
+			}
+			$this->motionX*=$friction;$this->motionZ*=$friction;
+			// Apply gravity after movement: a 0.42 jump must travel its full first
+			// step before gravity, otherwise a one-block ledge cannot be reached.
+			if(!$flying&&!$swimming){$this->motionY=($this->motionY-0.08)*0.98;}
+			else{$this->motionY*=$swimming?0.9:0.91;}
+			if($flying){$this->resetFallDistance();}
+			$this->updateMovement();
+		}finally{$this->timings->stopTiming();}
+		return !$this->closed;
 	}
 
 	public function willMove($distance = 36){
@@ -75,10 +121,22 @@ abstract class Creature extends Living{
 	}
 
 	public function attack($damage, EntityDamageEvent $source){
-		parent::attack($damage, $source);
-		if(!$source->isCancelled() and $source->getCause() == EntityDamageEvent::CAUSE_ENTITY_ATTACK){
-			$this->attackingTick = 20;
+		$result=parent::attack($damage, $source);
+		if(!$source->isCancelled()&&$source->getFinalDamage()>0&&!($this instanceof Human)){
+			if($source->getCause()===EntityDamageEvent::CAUSE_ENTITY_ATTACK){$this->attackingTick=20;}
+			\pocketmine\entity\ai\VanillaAI26::onDamage($this,$source);
 		}
+		return $result;
+	}
+
+	public function isFireProof() : bool{return (bool)$this->fireProof;}
+
+	public function close(){
+		if(!($this instanceof Human)){
+			\pocketmine\entity\ai\VanillaAI26::forget($this);
+			\pocketmine\entity\ai\Navigation26::forget((int)$this->getId());
+		}
+		parent::close();
 	}
 
 	/**

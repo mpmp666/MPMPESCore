@@ -13,7 +13,7 @@ use pocketmine\Player;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\item\Item as ItemItem;
 
-class Slime extends Living{
+class Slime extends Creature{
 	const NETWORK_ID = 37;
 
 	const DATA_SLIME_SIZE = 16;

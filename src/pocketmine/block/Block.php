@@ -948,50 +948,7 @@ class Block extends Position implements Metadatable{
 	 * @return float
 	 */
 	public function getBreakTime(Item $item){
-		$base = $this->getHardness() * 1.5;
-		if($this->canBeBrokenWith($item)){
-			if($this->getToolType() === Tool::TYPE_SHEARS and $item->isShears()){
-				$base /= 15;
-			}elseif(
-				($this->getToolType() === Tool::TYPE_PICKAXE and ($tier = $item->isPickaxe()) !== false) or
-				($this->getToolType() === Tool::TYPE_AXE and ($tier = $item->isAxe()) !== false) or
-				($this->getToolType() === Tool::TYPE_SHOVEL and ($tier = $item->isShovel()) !== false)
-			){
-				switch($tier){
-					case Tool::TIER_WOODEN:
-						$base /= 2;
-						break;
-					case Tool::TIER_STONE:
-						$base /= 4;
-						break;
-					case Tool::TIER_IRON:
-						$base /= 6;
-						break;
-					case Tool::TIER_DIAMOND:
-						$base /= 8;
-						break;
-					case Tool::TIER_GOLD:
-						$base /= 12;
-						break;
-				}
-			}
-		}else{
-			$base *= 3.33;
-		}
-
-		if($item->isSword()){
-			$base *= 0.5;
-		}
-
-		// 效率附魔: 手持效率工具且能破坏该方块时提速 (level^2+1)
-		if($this->canBeBrokenWith($item)){
-			$eff = $item->getEnchantmentLevel(Enchantment::TYPE_MINING_EFFICIENCY);
-			if($eff > 0){
-				$base /= ($eff * $eff + 1);
-			}
-		}
-
-		return $base;
+		return \pocketmine\item\EnchantmentEffects26::breakTime($this, $item);
 	}
 
 	public function canBeBrokenWith(Item $item){

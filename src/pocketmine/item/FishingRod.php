@@ -21,8 +21,11 @@
 
 namespace pocketmine\item;
 
-class FishingRod extends Item {
+class FishingRod extends Tool {
 	public function __construct($meta = 0, $count = 1) {
-		parent::__construct(self::FISHING_ROD, 0, $count, "Fishing Rod");
+		parent::__construct(self::FISHING_ROD, $meta, $count, "Fishing Rod");
 	}
+	public function getMaxDurability(){ return 65; }
+	public function isTool(){ return true; }
+	public function useOn($object, $type = 1){ EnchantmentEffects26::damageItem($this, 1); return true; }
 } 

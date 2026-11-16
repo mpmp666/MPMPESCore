@@ -85,6 +85,8 @@ use pocketmine\command\defaults\BanipbynameCommand;
 use pocketmine\command\defaults\BanCidCommand;
 use pocketmine\command\defaults\PardonCidCommand;
 use pocketmine\command\defaults\WeatherCommand;
+use pocketmine\command\defaults\StructureCommand;
+use pocketmine\command\defaults\LocateCommand;
 
 class SimpleCommandMap implements CommandMap{
 
@@ -164,6 +166,8 @@ class SimpleCommandMap implements CommandMap{
 		$this->register("pocketmine", new XpCommand("xp"));
 		$this->register("pocketmine", new SetBlockCommand("setblock"));
 		$this->register("pocketmine", new FrpCommand("frp"));
+		$this->register("pocketmine", new StructureCommand("structure"));
+		$this->register("pocketmine", new LocateCommand("locate"));
 
 		if($this->server->getProperty("debug.commands", false)){
 			$this->register("pocketmine", new StatusCommand("status"));

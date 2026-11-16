@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "chunks": 309,
+  "tiles": 112,
+  "chests": 65,
+  "loot_stacks": 219,
+  "entities_spawned": 2,
+  "natural": [520, 62, 264],
+  "php": "8.4.16 ZTS / pmmpthread 6.3.0",
+  "scope": "isolated server from clean staged source export; real McRegion generation, container serialization, unload/reload; reference seed 123456",
+  "command": "python3 tools/test_structure_server.py --php /path/to/php --port 19142",
+  "exit_code": 0
+}

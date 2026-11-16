@@ -27,6 +27,7 @@ use pocketmine\event\Cancellable;
 use pocketmine\Player;
 use pocketmine\item\Item;
 use pocketmine\item\enchantment\Enchantment;
+use pocketmine\item\EnchantmentEffects26;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 
 class EntityDamageEvent extends EntityEvent implements Cancellable{
@@ -142,61 +143,10 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 				break;
 		}
 
-		//For MODIFIER_PROTECTION: 护甲附魔减伤 (MCPE 0.14.3 规则, EPFP 式)
-		if($entity instanceof Player){
-			$armors = $entity->getInventory()->getArmorContents();
-			$protAll = 0;    // 保护
-			$protFire = 0;   // 火焰保护
-			$protFall = 0;   // 摔落保护
-			$protExpl = 0;   // 爆炸保护
-			$protProj = 0;   // 弹射物保护
-			$thorns = 0;     // 荆棘等级
-			foreach($armors as $a){
-				if($a->isArmor()){
-					$protAll  = max($protAll,  $a->getEnchantmentLevel(Enchantment::TYPE_ARMOR_PROTECTION));
-					$protFire = max($protFire, $a->getEnchantmentLevel(Enchantment::TYPE_ARMOR_FIRE_PROTECTION));
-					$protFall = max($protFall, $a->getEnchantmentLevel(Enchantment::TYPE_ARMOR_FALL_PROTECTION));
-					$protExpl = max($protExpl, $a->getEnchantmentLevel(Enchantment::TYPE_ARMOR_EXPLOSION_PROTECTION));
-					$protProj = max($protProj, $a->getEnchantmentLevel(Enchantment::TYPE_ARMOR_PROJECTILE_PROTECTION));
-					$thorns   = max($thorns,   $a->getEnchantmentLevel(Enchantment::TYPE_ARMOR_THORNS));
-				}
-			}
-			// 取各类型对应的最高附魔等级, 累加 EPFP 减伤 (与护甲基础值独立叠加)
-			$epf = 0;
-			switch($cause){
-				case self::CAUSE_ENTITY_ATTACK:
-				case self::CAUSE_CONTACT:
-				case self::CAUSE_MAGIC:
-				case self::CAUSE_CUSTOM:
-					$epf += $protAll;
-					break;
-				case self::CAUSE_FIRE:
-				case self::CAUSE_FIRE_TICK:
-				case self::CAUSE_LAVA:
-					$epf += $protAll + $protFire * 2; // 火焰保护每级等效2EPF
-					break;
-				case self::CAUSE_FALL:
-					$epf += $protAll + $protFall * 3; // 摔落保护每级3EPF
-					break;
-				case self::CAUSE_BLOCK_EXPLOSION:
-				case self::CAUSE_ENTITY_EXPLOSION:
-					$epf += $protAll + $protExpl * 2;
-					break;
-				case self::CAUSE_PROJECTILE:
-					$epf += $protAll + $protProj * 3;
-					break;
-				case self::CAUSE_LIGHTNING:
-					$epf += $protAll + $protFire * 2;
-					break;
-			}
-			if($epf > 0){
-				$reduction = min(20, $epf) * 0.04; // 上限80%
-				$this->setDamage(1 - $reduction, self::MODIFIER_PROTECTION);
-			}
-			// 荆棘: 记录到 use_armors 由 useArmors() 反伤 (此处仅标记)
-			if($thorns > 0){
-				$this->thornsLevel = $thorns;
-			}
+		// Sum every equipped piece, clamp EPF to 20, then apply 4% per point.
+		$points = EnchantmentEffects26::protectionPoints(EnchantmentEffects26::armor($entity), (int) $cause);
+		if($points > 0){
+			$this->setDamage(EnchantmentEffects26::protectionMultiplier($points), self::MODIFIER_PROTECTION);
 		}
 	}
 

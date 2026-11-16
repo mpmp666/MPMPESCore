@@ -144,10 +144,21 @@ dserver:
  #the server list，Separate by ';'，e.g. 1.example.com:19132;2.example.com:19133
  server-list: ""
  
+# Imported buildings affect new chunks only. spacing is region size in chunks.
+structures:
+  enabled: true
+  families:
+    village: {enabled: true, spacing: 28}
+    pillager_outpost: {enabled: true, spacing: 32}
+    woodland_mansion: {enabled: true, spacing: 64}
+    end_city: {enabled: true, spacing: 20}
+    bastion: {enabled: true, spacing: 28}
+    nether_fortress: {enabled: true, spacing: 28}
+
 ai:
  #Bật/tắt AI (true/false) (bên dưới là kích hoạt các AI nếu muốn cho vào server, đánh true/false)
- enable: false
- #Zombie'AI，0=hủy bỏ，1=AI 1.0ver，2=AI mới(Siêu nhân)
+ enable: true
+ #Zombie AI: 0=off, nonzero=shared 26.2 behavior controller
  zombie: 1
  #AI Zombie Lợn
  pigzombie: true
@@ -171,3 +182,20 @@ ai:
  creeper-explode-destroy-block: false
  #Bật/tắt nếu muốn kích hoạt chế độ mob tự spawn (true/false)
  mobgenerate: false
+ #Shared 26.2 behavior profiles for the remaining registered mobs
+ wolf: true
+ ocelot: true
+ rabbit: true
+ villager: true
+ spider: true
+ cave-spider: true
+ slime: true
+ magma-cube: true
+ silverfish: true
+ enderman: true
+ blaze: true
+ ghast: true
+ bat: true
+ squid: true
+ #Allow sheep grazing to alter grass/plants; does not control explosion terrain damage
+ mob-griefing: false

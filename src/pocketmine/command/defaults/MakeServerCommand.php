@@ -54,6 +54,16 @@ class MakeServerCommand extends VanillaCommand{
 			$phar->addFile($file, $path);
 			$sender->sendMessage("[Genisys] Adding $path");
 		}
+		// Template files live outside src and are required by all generation workers.
+		$structures = $filePath . 'resources/structures';
+		if(is_dir($structures)){
+			foreach(new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($structures, \FilesystemIterator::SKIP_DOTS)) as $file){
+				if(!$file->isFile()){ continue; }
+				$path = substr(str_replace('\\', '/', $file->getPathname()), strlen($filePath));
+				if(str_contains($path, '/.') || str_contains($path, '..')){ continue; }
+				$phar->addFile($file->getPathname(), $path);
+			}
+		}
 		foreach($phar as $file => $finfo){
 			/** @var \PharFileInfo $finfo */
 			if($finfo->getSize() > (1024 * 512)){

@@ -27,4 +27,24 @@ class Bow extends Tool{
 		parent::__construct(self::BOW, $meta, $count, "Bow");
 	}
 
+	public static function drawPower(int $ticks) : float{
+		$p = max(0, $ticks) / 20.0;
+		return min(1.0, ($p * $p + 2 * $p) / 3);
+	}
+
+	public function applyEnchantments(\pocketmine\entity\Arrow $arrow, bool $creative = false){
+		$arrow->setBaseDamage(2.0 + EnchantmentEffects26::powerBonus($this->getEnchantmentLevel(\pocketmine\item\enchantment\Enchantment::TYPE_BOW_POWER)));
+		$arrow->setPunch($this->getEnchantmentLevel(\pocketmine\item\enchantment\Enchantment::TYPE_BOW_KNOCKBACK));
+		if($this->getEnchantmentLevel(\pocketmine\item\enchantment\Enchantment::TYPE_BOW_FLAME) > 0){ $arrow->setOnFire(100); }
+		$arrow->setPickupAllowed(!$creative and $this->consumesArrow(false));
+	}
+
+	public function consumesArrow(bool $creative) : bool{
+		return !$creative && $this->getEnchantmentLevel(\pocketmine\item\enchantment\Enchantment::TYPE_BOW_INFINITY) <= 0;
+	}
+
+	public function useOn($object, $type = 1){
+		EnchantmentEffects26::damageItem($this, 1);
+		return true;
+	}
 }

@@ -98,6 +98,7 @@ use pocketmine\inventory\ShapedRecipe;
 use pocketmine\inventory\ShapelessRecipe;
 use pocketmine\inventory\SimpleTransactionGroup;
 use pocketmine\item\FoodSource;
+use pocketmine\item\EnchantmentEffects26;
 use pocketmine\item\Item;
 use pocketmine\item\Potion;
 use pocketmine\level\ChunkLoader;
@@ -1646,6 +1647,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			}
 
 			if($entity instanceof Arrow and $entity->hadCollision){
+				if(!$entity->canBePickedUp($this)){ continue; }
 				$item = Item::get(Item::ARROW, 0, 1);
 				if($this->isSurvival() and !$this->inventory->canAddItem($item)){
 					continue;
@@ -2012,6 +2014,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$this->processMovement($tickDiff);
 
 			if(!$this->isSpectator()) $this->entityBaseTick($tickDiff);
+			$this->updateWaterMovementEnchantments();
 
 			if($this->isOnFire() or $this->lastUpdate % 10 == 0){
 				if($this->isCreative() and !$this->isInsideOfFire()){
@@ -3048,7 +3051,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						}
 						if(!$ev->isCancelled()){
 							if($this->isFishing()){
-								$this->setFishingHook();
+								$this->fishingHook->reelLine();
 							}else{
 								$nbt = new CompoundTag("", [
 									"Pos" => new ListTag("Pos", [
@@ -3287,25 +3290,11 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 								]);
 
 								$diff = ($this->server->getTick() - $this->startAction);
-								$p = $diff / 20;
-								$f = min((($p ** 2) + $p * 2) / 3, 1) * 2;
-								$ev = new EntityShootBowEvent($this, $bow, Entity::createEntity("Arrow", $this->chunk, $nbt, $this, $f == 2 ? true : false), $f);
-
-							// ===== 弓附魔生效 (MCPE 0.14.3) =====
-							$power = $bow->getEnchantmentLevel(Enchantment::TYPE_BOW_POWER);
-							$flame = $bow->getEnchantmentLevel(Enchantment::TYPE_BOW_FLAME);
-							$infinity = $bow->getEnchantmentLevel(Enchantment::TYPE_BOW_INFINITY);
-							// 力量: 每级 +25% 力 (最高V=+125%), 影响射程与伤害
-							if($power > 0){
-								$newForce = $f * (1 + $power * 0.25);
-								$ev->setForce(min($newForce, 2 * (1 + 5 * 0.25))); // 封顶
-							}
-							// 火矢: 箭带火
-							if($flame > 0){
-								$ev->getProjectile()->setOnFire($flame * 4 * 20); // 每级4秒
-							}
-							// 无限: 标记不消耗箭
-							$bowInfinity = $infinity > 0;
+								$f = \pocketmine\item\Bow::drawPower($diff) * 2;
+								$arrow = Entity::createEntity("Arrow", $this->chunk, $nbt, $this, $f >= 2);
+								if($bow instanceof \pocketmine\item\Bow and $arrow instanceof Arrow){ $bow->applyEnchantments($arrow, $this->isCreative()); }
+								$ev = new EntityShootBowEvent($this, $bow, $arrow, $f);
+								$bowInfinity = $bow->getEnchantmentLevel(Enchantment::TYPE_BOW_INFINITY) > 0;
 
 								if($f < 0.1 or $diff < 5){
 									$ev->setCancelled();
@@ -3318,26 +3307,38 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 									$this->inventory->sendContents($this);
 								}else{
 									$ev->getProjectile()->setMotion($ev->getProjectile()->getMotion()->multiply($ev->getForce()));
+
+									if($ev->getProjectile() instanceof Projectile){
+										$this->server->getPluginManager()->callEvent($projectileEv = new ProjectileLaunchEvent($ev->getProjectile()));
+										if($projectileEv->isCancelled()){
+											$ev->getProjectile()->kill();
+										}else{
 									if($this->isSurvival()){
 										if(!$bowInfinity){
 											$this->inventory->removeItem(Item::get(Item::ARROW, 0, 1));
 										}
-										$bow->setDamage($bow->getDamage() + 1);
+										EnchantmentEffects26::damageItem($bow, 1);
 										if($bow->getDamage() >= 385){
 											$this->inventory->setItemInHand(Item::get(Item::AIR, 0, 0));
 										}else{
 											$this->inventory->setItemInHand($bow);
 										}
 									}
-									if($ev->getProjectile() instanceof Projectile){
-										$this->server->getPluginManager()->callEvent($projectileEv = new ProjectileLaunchEvent($ev->getProjectile()));
-										if($projectileEv->isCancelled()){
-											$ev->getProjectile()->kill();
-										}else{
 											$ev->getProjectile()->spawnToAll();
 											$this->level->addSound(new LaunchSound($this), $this->getViewers());
 										}
 									}else{
+									if($this->isSurvival()){
+										if(!$bowInfinity){
+											$this->inventory->removeItem(Item::get(Item::ARROW, 0, 1));
+										}
+										EnchantmentEffects26::damageItem($bow, 1);
+										if($bow->getDamage() >= 385){
+											$this->inventory->setItemInHand(Item::get(Item::AIR, 0, 0));
+										}else{
+											$this->inventory->setItemInHand($bow);
+										}
+									}
 										$ev->getProjectile()->spawnToAll();
 									}
 								}
@@ -3541,8 +3542,17 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 							break;
 						}
 					}
-					if($target instanceof Animal and $hand){
-						//TODO: Feed
+					if($target instanceof \pocketmine\entity\Creature and $target->isAlive() and !$this->isSpectator() and !$this->isAdventure() and $this->canInteract($target, 4)){
+						$interaction = new PlayerInteractEvent($this, $hand, $target, -1, PlayerInteractEvent::RIGHT_CLICK_AIR);
+						$this->server->getPluginManager()->callEvent($interaction);
+						if(!$interaction->isCancelled() and \pocketmine\entity\ai\VanillaAI26::interactOwned($target, $this, $hand)){ break; }
+						if(!$interaction->isCancelled() and \pocketmine\entity\ai\VanillaAI26::feed($target, $this, $hand)){
+							if($this->isSurvival()){
+								$hand->setCount($hand->getCount() - 1);
+								$this->inventory->setItemInHand($hand->getCount() > 0 ? $hand : Item::get(Item::AIR));
+							}
+							break;
+						}
 					}
 					break;
 				}
@@ -3585,25 +3595,6 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						EntityDamageEvent::MODIFIER_BASE => isset($damageTable[$item->getId()]) ? $damageTable[$item->getId()] : 1,
 					];
 
-					// ===== 武器附魔生效 (MCPE 0.14.3) =====
-					$sharp = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_SHARPNESS);
-					$smite = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_SMITE);
-					$arthr = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_ARTHROPODS);
-					$kbEnch = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_KNOCKBACK);
-					$fire = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_FIRE_ASPECT);
-					$loot = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
-					// 额外伤害: 锋利每级+1(满V=5); 亡灵只对亡灵+; 节肢只对节肢+
-					$extra = 0;
-					if($sharp > 0) $extra += $sharp; // 锋利: +1/级
-					if($smite > 0 and ($target instanceof \pocketmine\entity\Zombie or $target instanceof \pocketmine\entity\Skeleton)) $extra += $smite * 2.5; // 亡灵+2.5/级
-					if($arthr > 0 and ($target instanceof \pocketmine\entity\Spider or $target instanceof \pocketmine\entity\CaveSpider)) $extra += $arthr * 2.5; // 节肢+2.5/级
-					if($extra > 0){
-						$damage[EntityDamageEvent::MODIFIER_BASE] += $extra;
-					}
-					// 击退附魔: 提高 knockBack
-					$weaponKnockBack = 0.4 + $kbEnch * 0.5; // 每级+0.5
-					// 火焰附加: 点燃目标
-					$weaponFire = $fire;
 
 					if(!$this->canInteract($target, 8)){
 						$cancelled = true;
@@ -3615,12 +3606,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						}
 					}
 
-					$ev = new EntityDamageByEntityEvent($this, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, $damage, $weaponKnockBack);
-					// 火焰附加: 命中点燃目标
-					if($weaponFire > 0 and $target->isAlive()){
-						$target->setOnFire($weaponFire * 4 * 20); // 每级4秒
-					}
-					// 抢夺: 暂存到事件, 由实体死亡掉落处读取 (见 EntityDeathEvent 处理)
+					$ev = new EntityDamageByEntityEvent($this, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, $damage);
+
 					if($cancelled){
 						$ev->setCancelled();
 					}
@@ -4027,12 +4014,20 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					$inv = $this->windowIndex[$packet->windowid];
 
 					/** @var $packet \pocketmine\network\protocol\ContainerSetSlotPacket */
-					if($inv instanceof EnchantInventory and $packet->item->hasEnchantments()){
-						$inv->onEnchant($this, $inv->getItem($packet->slot), $packet->item);
+					if($inv instanceof EnchantInventory and $packet->slot === 0){
+						$current = $inv->getItem(0);
+						if(($current->getId() !== $packet->item->getId() or $current->getDamage() !== $packet->item->getDamage() or $current->getCount() !== $packet->item->getCount() or !$current->deepEquals($packet->item)) and ($packet->item->hasEnchantments() or ($current->getId() === Item::BOOK and $packet->item->getId() === Item::ENCHANTED_BOOK))){
+							$this->currentTransaction = null;
+							$inv->onEnchant($this, $current, $packet->item);
+							break;
+						}
 					}
 
-					if($inv instanceof AnvilInventory and $packet->item->hasCustomName()){
-						//TODO
+					if($inv instanceof AnvilInventory and $packet->slot === 2){
+						$this->currentTransaction = null;
+						if($packet->item->getId() === Item::AIR){ $inv->takeResult($this); }
+						else{ $inv->onAnvil($this, $packet->item); }
+						break;
 					}
 
 					$transaction = new BaseTransaction($inv, $packet->slot, $inv->getItem($packet->slot), $packet->item);
@@ -4612,6 +4607,19 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	}
 
 	protected $movementSpeed = 0.1;
+	private $waterEnchantmentScale26 = 1.0;
+
+	/** Client-driven movement: use the existing speed attribute while in water. */
+	public function updateWaterMovementEnchantments(){
+		$boots = $this->inventory->getBoots();
+		$level = $boots->isArmor() && $boots->isBoots() ? $boots->getEnchantmentLevel(Enchantment::TYPE_WATER_SPEED) : 0;
+		$scale = $this->isInsideOfWater() ? EnchantmentEffects26::waterMovementScale($level, $this->isOnGround()) : 1.0;
+		if(abs($scale - $this->waterEnchantmentScale26) > 0.000001){
+			$attribute = $this->getAttributeMap()->getAttribute(Attribute::MOVEMENT_SPEED);
+			if($attribute !== null){ $attribute->setValue($attribute->getValue() / $this->waterEnchantmentScale26 * $scale); }
+			$this->waterEnchantmentScale26 = $scale;
+		}
+	}
 
 	/**
 	 * Set movement speed to the player
@@ -4620,7 +4628,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	 */
 	public function setMovementSpeed($amount){
 		$this->movementSpeed = $amount;
-		$this->getAttributeMap()->getAttribute(Attribute::MOVEMENT_SPEED)->setValue($amount);
+		$this->getAttributeMap()->getAttribute(Attribute::MOVEMENT_SPEED)->setValue($amount * $this->waterEnchantmentScale26);
 	}
 
 	/**

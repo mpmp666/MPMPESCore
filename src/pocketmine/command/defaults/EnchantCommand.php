@@ -58,24 +58,42 @@ class EnchantCommand extends VanillaCommand{
 			return true;
 		}
 
-		$enchantId = (int) $args[1];
-		$enchantLevel = isset($args[2]) ? (int) $args[2] : 1;
-
-		$enchantment = Enchantment::getEnchantment($enchantId);
-		if($enchantment->getId() === Enchantment::TYPE_INVALID){
-			$sender->sendMessage(new TranslationContainer("commands.enchant.notFound", [$enchantId]));
+		if(count($args) > 3){
+			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
 			return true;
 		}
 
-		$enchantment->setLevel($enchantLevel);
+		$enchantment = Enchantment::fromString($args[1]);
+		if($enchantment->getId() === Enchantment::TYPE_INVALID){
+			$sender->sendMessage(new TranslationContainer("commands.enchant.notFound", [$args[1]]));
+			return true;
+		}
+		$levelArg = $args[2] ?? "1";
+		if(!preg_match('/^[1-9][0-9]*$/D', (string) $levelArg) || (int) $levelArg > $enchantment->getMaxLevel()){
+			$sender->sendMessage(TextFormat::RED . "Enchantment level must be between 1 and " . $enchantment->getMaxLevel() . ".");
+			return true;
+		}
+		$enchantment->setLevel((int) $levelArg);
 
 		$item = $player->getInventory()->getItemInHand();
-
 		if($item->getId() <= 0){
 			$sender->sendMessage(new TranslationContainer("commands.enchant.noItem"));
 			return true;
 		}
+		if(!Enchantment::canEnchantItem($item, $enchantment, false)){
+			$sender->sendMessage(TextFormat::RED . "That enchantment cannot be applied to this item.");
+			return true;
+		}
+		foreach($item->getEnchantments() as $existing){
+			if($existing->getId() !== $enchantment->getId() && !$enchantment->isCompatibleWith($existing)){
+				$sender->sendMessage(TextFormat::RED . "That enchantment is incompatible with an enchantment on this item.");
+				return true;
+			}
+		}
 
+		if($item->getId() === \pocketmine\item\Item::BOOK){
+			$item = \pocketmine\item\Item::get(\pocketmine\item\Item::ENCHANTED_BOOK, $item->getDamage(), $item->getCount(), $item->getCompoundTag());
+		}
 		$item->addEnchantment($enchantment);
 		$player->getInventory()->setItemInHand($item);
 

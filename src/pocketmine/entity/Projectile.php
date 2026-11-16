@@ -78,12 +78,33 @@ abstract class Projectile extends Entity{
 		$this->namedtag->Age = new ShortTag("Age", $this->age);
 	}
 
+	/** Never let mob projectiles load/generate chunks through collision queries. */
+	public function hasLoadedFlightArea26() : bool{
+		if(!($this->shootingEntity instanceof Creature) || $this->shootingEntity instanceof Human){ return true; }
+		if(!is_finite($this->x) || !is_finite($this->z) || !is_finite($this->motionX) || !is_finite($this->motionZ) || abs($this->motionX) > 64 || abs($this->motionZ) > 64){ return false; }
+		$padding = max(4.0, $this->width / 2 + 3.0);
+		$minX = ((int) floor(min($this->x, $this->x + $this->motionX) - $padding)) >> 4;
+		$maxX = ((int) floor(max($this->x, $this->x + $this->motionX) + $padding)) >> 4;
+		$minZ = ((int) floor(min($this->z, $this->z + $this->motionZ) - $padding)) >> 4;
+		$maxZ = ((int) floor(max($this->z, $this->z + $this->motionZ) + $padding)) >> 4;
+		$chunks = $this->getLevel()->getChunks();
+		for($cx = $minX; $cx <= $maxX; ++$cx){ for($cz = $minZ; $cz <= $maxZ; ++$cz){
+			if(!isset($chunks[\pocketmine\level\Level::chunkHash($cx, $cz)])){ return false; }
+		} }
+		return true;
+	}
+
 	public function onUpdate($currentTick){
 		if($this->closed){
 			return false;
 		}
 
 
+		if(!$this->hasLoadedFlightArea26()){
+			$this->kill();
+			$this->close();
+			return false;
+		}
 		$tickDiff = $currentTick - $this->lastUpdate;
 		if($tickDiff <= 0 and !$this->justCreated){
 			return true;
@@ -139,11 +160,7 @@ abstract class Projectile extends Entity{
 					$this->server->getPluginManager()->callEvent(new ProjectileHitEvent($this));
 
 					$motion = sqrt($this->motionX ** 2 + $this->motionY ** 2 + $this->motionZ ** 2);
-					$damage = ceil($motion * $this->damage);
-
-					if($this instanceof Arrow and $this->isCritical){
-						$damage += mt_rand(0, (int) ($damage / 2) + 1);
-					}
+					$damage = $this instanceof Arrow ? $this->hitDamage($motion) : ceil($motion * $this->damage);
 
 					if($this->shootingEntity === null){
 						$ev = new EntityDamageByEntityEvent($this, $movingObjectPosition->entityHit, EntityDamageEvent::CAUSE_PROJECTILE, $damage);
@@ -157,7 +174,7 @@ abstract class Projectile extends Entity{
 
 					$this->hadCollision = true;
 
-					if($this->fireTicks > 0){
+					if(!$ev->isCancelled() and $ev->getFinalDamage() > 0 and $this->fireTicks > 0){
 						$ev = new EntityCombustByEntityEvent($this, $movingObjectPosition->entityHit, 5);
 						$this->server->getPluginManager()->callEvent($ev);
 						if(!$ev->isCancelled()){

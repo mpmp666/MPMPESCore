@@ -134,10 +134,21 @@ dserver:
  #伺服器列表，用;隔開，例如 1.example.com:19132;2.example.com:19133
  server-list: ""
  
+# 匯入建築僅影響新區塊。spacing 為區塊區域間距，可按系列禁用。
+structures:
+  enabled: true
+  families:
+    village: {enabled: true, spacing: 28}
+    pillager_outpost: {enabled: true, spacing: 32}
+    woodland_mansion: {enabled: true, spacing: 64}
+    end_city: {enabled: true, spacing: 20}
+    bastion: {enabled: true, spacing: 28}
+    nether_fortress: {enabled: true, spacing: 28}
+
 ai:
  #AI總開關
- enable: false
- #殭屍的AI，0為關閉，1為1.0版AI，2為新AI（不完善）
+ enable: true
+ #殭屍 AI：0 關閉，非零啟用共享 26.2 行為控制器
  zombie: 1
  #殭屍豬人的AI
  pigzombie: true
@@ -161,3 +172,20 @@ ai:
  creeper-explode-destroy-block: false
  #是否允許自動生成生物
  mobgenerate: false
+ #Shared 26.2 behavior profiles for the remaining registered mobs
+ wolf: true
+ ocelot: true
+ rabbit: true
+ villager: true
+ spider: true
+ cave-spider: true
+ slime: true
+ magma-cube: true
+ silverfish: true
+ enderman: true
+ blaze: true
+ ghast: true
+ bat: true
+ squid: true
+ #Allow sheep grazing to alter grass/plants; does not control explosion terrain damage
+ mob-griefing: false

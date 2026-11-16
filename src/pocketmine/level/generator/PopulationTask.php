@@ -37,6 +37,8 @@ class PopulationTask extends AsyncTask{
 	public $levelId;
 	public $chunk;
 	public $chunkClass;
+	/** JSON is explicit because McRegion fast binary deliberately omits tile entities. */
+	public $structureTiles = '{"tiles":[],"entities":[]}';
 
 	public $chunk0;
 	public $chunk1;
@@ -118,7 +120,22 @@ class PopulationTask extends AsyncTask{
 			}
 		}
 
+		// Existing populated neighbors may contain buildings or player edits.
+		// Ordinary tree/ore populators can inspect them, but must not publish writes there.
+		$protectedNeighbors = [];
+		foreach($chunks as $i => $neighbor){
+			if($neighbor !== null && $neighbor->isPopulated()){
+				$protectedNeighbors[$i] = $neighbor->toFastBinary();
+			}
+		}
 		$generator->populateChunk($chunk->getX(), $chunk->getZ());
+		foreach($protectedNeighbors as $i => $binary){
+			$restored = $chunkC::fromFastBinary($binary);
+			$restored->setChanged(false);
+			$manager->setChunk($restored->getX(), $restored->getZ(), $restored);
+			$chunks[$i] = $restored;
+		}
+		$this->structureTiles = json_encode($generator->populateStructures($manager, $chunk->getX(), $chunk->getZ()), JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
 
 		$chunk = $manager->getChunk($chunk->getX(), $chunk->getZ());
 		$chunk->recalculateHeightMap();
@@ -181,7 +198,8 @@ class PopulationTask extends AsyncTask{
 				}
 			}
 
-			$level->generateChunkCallback($chunk->getX(), $chunk->getZ(), $chunk);
+			$structureData=json_decode($this->structureTiles, true, 512, JSON_THROW_ON_ERROR);
+			$level->generateChunkCallback($chunk->getX(), $chunk->getZ(), $chunk, $structureData);
 		}
 	}
 }

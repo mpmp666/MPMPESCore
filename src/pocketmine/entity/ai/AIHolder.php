@@ -83,25 +83,13 @@ class AIHolder{
 		}
 
 
-		/*$this->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask([
-			$this,
-			"TimeFix"
-		]), 20);*/
-
-		$this->getServer()->getScheduler()->scheduleRepeatingTask(new CallbackTask ([$this, "RotationTimer"]), 2);
-
-		$this->ZombieAI = new ZombieAI($this);
-		$this->CowAI = new CowAI($this);
-		$this->PigAI = new PigAI($this);
-		$this->SheepAI = new SheepAI($this);
-		$this->WolfAI = new WolfAI($this);
-		//TODO: improve AIs below
-		$this->ChickenAI = new ChickenAI($this);
-		$this->CreeperAI = new CreeperAI($this);
-		$this->SkeletonAI = new SkeletonAI($this);
-
-		$this->IronGolemAI = new IronGolemAI($this);
-		//$this->PigZombieAI = new PigZombieAI($this);
+		// Creature::onUpdate owns the shared 26.2 behavior and motor. The former
+		// per-species tasks and RotationTimer also moved entities and must not run.
+		// Keep the two documented MPApi tuning properties without starting tasks.
+		$this->ZombieAI=(object)['hatred_r'=>35.0,'zo_hate_v'=>1.0];
+		foreach(['CowAI','PigAI','SheepAI','WolfAI','ChickenAI','CreeperAI','SkeletonAI','IronGolemAI','SnowGolemAI','PigZombieAI'] as $property){
+			$this->$property=new \stdClass();
+		}
 	}
 
 	/*
@@ -113,7 +101,8 @@ class AIHolder{
 	 * 设置僵尸仇恨半径
 	 */
 	public function setZombieHatred_r($r){
-		$this->ZombieAI->hatred_r = $r;
+		$this->ZombieAI->hatred_r=max(0.0,min(64.0,(float)$r));
+		$this->server->aiConfig['zombie-follow-range']=$this->ZombieAI->hatred_r;
 	}
 
 	/**
@@ -129,7 +118,8 @@ class AIHolder{
 	 * 设置僵尸仇恨模式下的走路速度
 	 */
 	public function setZombieHate_v($v){
-		$this->ZombieAI->zo_hate_v = $v;
+		$this->ZombieAI->zo_hate_v=max(0.0,min(5.0,(float)$v));
+		$this->server->aiConfig['zombie-speed-multiplier']=$this->ZombieAI->zo_hate_v;
 	}
 
 	/**
@@ -139,7 +129,7 @@ class AIHolder{
 	 * （可用于更改刷怪时间间隔）
 	 */
 	public function RestartSpawnTimer($tick = 600){
-		$task = $this->tasks['ZombieGenerate'];
+		$task = $this->tasks['ZombieGenerate'] ?? null;
 		if($task instanceof TaskHandler){
 			//TODO 没试验过是否有效。。。
 			$task->cancel();
@@ -155,7 +145,7 @@ class AIHolder{
 	 * 停止刷怪计时器
 	 */
 	public function CancelSpawnTimer(){
-		$task = $this->tasks['ZombieGenerate'];
+		$task = $this->tasks['ZombieGenerate'] ?? null;
 		if($task instanceof TaskHandler){
 			$task->cancel();
 			return true;
@@ -975,73 +965,11 @@ class AIHolder{
 		}
 	}
 
-	public function EntityDamage(EntityDamageEvent $event){  //击退修复
-		if($event instanceof EntityDamageByEntityEvent){
-			$p = $event->getDamager();
-			$entity = $event->getEntity();
-			if($entity instanceof Zombie){
-				$array = &$this->zombie;
-			}elseif($entity instanceof Creeper){
-				$array = &$this->Creeper;
-			}elseif($entity instanceof Cow){
-				$array = &$this->Cow;
-			}elseif($entity instanceof Pig){
-				$array = &$this->Pig;
-			}elseif($entity instanceof Sheep){
-				$array = &$this->Sheep;
-			}elseif($entity instanceof Chicken){
-				$array = &$this->Chicken;
-			}elseif($entity instanceof Skeleton){
-				$array = &$this->Skeleton;
-			}else{
-				$array = [];
-			}
-			if(isset($array[$entity->getId()])){
-				if($p instanceof Player and ($array[$entity->getId()]['canAttack'] == 0)){
-					$weapon = $p->getInventory()->getItemInHand()->getID();  //得到玩家手中的武器
-					$high = 0;
-					if($weapon == 258 or $weapon == 271 or $weapon == 275){  //击退x5
-						$back = 1.5;
-					}elseif($weapon == 267 or $weapon == 272 or $weapon == 279 or $weapon == 283 or $weapon == 286){  //击退x1
-						$back = 3;
-					}elseif($weapon == 276){  //击退x2
-						$back = 4;
-					}elseif($weapon == 292){  //击退x10
-						$back = 8;
-						$high = 3;
-					}else{
-						$back = 1;
-					}
-					//var_dump("玩家".$p->getName()."攻击了ID为".$zo->getId()."的实体");
-					$array[$entity->getId()]['x'] = $array[$entity->getId()]['x'] - $array[$entity->getId()]['xxx'] * $back;
-					$array[$entity->getId()]['y'] = $entity->getY() + $high;
-					$array[$entity->getId()]['z'] = $array[$entity->getId()]['z'] - $array[$entity->getId()]['zzz'] * $back;
-					$pos = new Vector3 ($array[$entity->getId()]['x'], $array[$entity->getId()]['y'], $array[$entity->getId()]['z']);  //目标坐标
-					//$entity->setPosition($pos);
-					$entity->knockBack($entity, 0, $array[$entity->getId()]['xxx'] * $back, $array[$entity->getId()]['zzz'] * $back);
-					if(isset($array[$entity->getId()])){
-						$zom = &$array[$entity->getId()];
-						$zom['IsChasing'] = $p->getName();
-						//var_dump( $zom['IsChasing']);
-					}
-				}
-				//MPApi AI 增强: 动物受击恐慌, 逃离攻击者(40 tick)
-				if(($entity instanceof Cow or $entity instanceof Pig or $entity instanceof Sheep or $entity instanceof Chicken) and $p instanceof Player){
-					$fdx = $entity->x - $p->x;
-					$fdz = $entity->z - $p->z;
-					$len = sqrt($fdx * $fdx + $fdz * $fdz);
-					if($len < 0.01){
-						$fdx = mt_rand(-10, 10) / 10;
-						$fdz = mt_rand(-10, 10) / 10;
-						$len = sqrt($fdx * $fdx + $fdz * $fdz);
-					}
-					$array[$entity->getId()]['panic'] = 40;
-					$array[$entity->getId()]['panicX'] = ($fdx / $len) * 1.2;
-					$array[$entity->getId()]['panicZ'] = ($fdz / $len) * 1.2;
-				}
-			}
-		}
+	public function EntityDamage(EntityDamageEvent $event){
+		// Retaliation/panic are recorded in Creature::attack only after damage
+		// and cancellation are final. Keep this legacy API hook without moving mobs.
 	}
+
 
 	public function knockBackover(Entity $entity, Vector3 $v3){
 		if($entity instanceof Entity){

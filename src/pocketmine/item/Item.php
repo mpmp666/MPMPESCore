@@ -623,6 +623,7 @@ class Item{
 			self::$list[self::FLINT_STEEL] = FlintSteel::class;
 			self::$list[self::SHEARS] = Shears::class;
 			self::$list[self::BOW] = Bow::class;
+			self::$list[self::FISHING_ROD] = FishingRod::class;
 
 			self::$list[self::RAW_FISH] = Fish::class;
 			self::$list[self::COOKED_FISH] = CookedFish::class;
@@ -1203,7 +1204,8 @@ class Item{
 				$item->setDamage($meta);
 				return $item;
 			}
-			$class = self::$list[$id];
+			// Async generators may ask for a block item before Item::init().
+			$class = self::$list !== null ? (self::$list[$id] ?? null) : ($id >= 0 && $id < 256 ? (Block::$list[$id] ?? null) : null);
 			if($class === null){
 				return (new Item($id, $meta, $count))->setCompoundTag($tags);
 			}elseif($id < 256){
@@ -1345,124 +1347,94 @@ class Item{
 		return null;
 	}
 
+	/** Read only numeric enchantment tags; malformed entries never alias ID zero. */
+	private function enchantmentEntryId($entry){
+		if(!($entry instanceof CompoundTag) or !isset($entry->id, $entry->lvl)){
+			return null;
+		}
+		if(!($entry->id instanceof ShortTag or $entry->id instanceof \pocketmine\nbt\tag\IntTag) or
+			!($entry->lvl instanceof ShortTag or $entry->lvl instanceof \pocketmine\nbt\tag\IntTag)){
+			return null;
+		}
+		return (int) $entry["id"];
+	}
+
 	public function hasEnchantments() : bool{
 		if(!$this->hasCompoundTag()){
 			return false;
 		}
-
 		$tag = $this->getNamedTag();
-		if(isset($tag->ench)){
-			$tag = $tag->ench;
-			if($tag instanceof ListTag){
+		if(!isset($tag->ench) or !($tag->ench instanceof ListTag)){
+			return false;
+		}
+		foreach($tag->ench as $entry){
+			if($this->enchantmentEntryId($entry) !== null and (int) $entry["lvl"] > 0){
 				return true;
 			}
 		}
-
 		return false;
 	}
 
-	/**
-	 * @param $id
-	 * @return Enchantment|null
-	 */
+	/** @return Enchantment|null */
 	public function getEnchantment(int $id){
-		if(!$this->hasEnchantments()){
-			return null;
-		}
-
-		foreach($this->getNamedTag()->ench as $entry){
-			if($entry["id"] === $id){
-				$e = Enchantment::getEnchantment($entry["id"]);
-				$e->setLevel($entry["lvl"]);
-				return $e;
-			}
-		}
-
-		return null;
+		$level = $this->getEnchantmentLevel($id);
+		if($level <= 0){ return null; }
+		$enchantment = Enchantment::getEnchantment($id);
+		return $enchantment->getId() === $id ? $enchantment->setLevel($level) : null;
 	}
-	
-	/**
-	 * @param $id
-	 * @return Int level|0(for null)
-	 */
+
 	public function getEnchantmentLevel(int $id){
-		if(!$this->hasEnchantments()){
-			return 0;
-		}
-
-		foreach($this->getNamedTag()->ench as $entry){
-			if($entry["id"] === $id){
-				$e = Enchantment::getEnchantment($entry["id"]);
-				$e->setLevel($entry["lvl"]);
-				// 放开原版上限截断: 超上限等级(如200级锋利)真实生效, 不再被打回上限
-				return $e->getLevel();
+		if(!$this->hasCompoundTag()){ return 0; }
+		$tag = $this->getNamedTag();
+		if(!isset($tag->ench) or !($tag->ench instanceof ListTag)){ return 0; }
+		$level = 0;
+		foreach($tag->ench as $entry){
+			if($this->enchantmentEntryId($entry) === $id){
+				$level = max($level, (int) $entry["lvl"]);
 			}
 		}
-
-		return 0;
+		return max(0, $level);
 	}
 
-	/**
-	 * @param Enchantment $ench
-	 */
 	public function addEnchantment(Enchantment $ench){
-		if(!$this->hasCompoundTag()){
-			$tag = new CompoundTag("", []);
-		}else{
-			$tag = $this->getNamedTag();
-		}
-
-		if(!isset($tag->ench)){
-			$tag->ench = new ListTag("ench", []);
-			$tag->ench->setTagType(NBT::TAG_Compound);
-		}
-
+		$tag = $this->hasCompoundTag() ? $this->getNamedTag() : new CompoundTag("", []);
+		$entries = [];
 		$found = false;
-
-		foreach($tag->ench as $k => $entry){
-			if($entry["id"] === $ench->getId()){
-				$tag->ench->{$k} = new CompoundTag("", [
-					"id" => new ShortTag("id", $ench->getId()),
-					"lvl" => new ShortTag("lvl", $ench->getLevel())
-				]);
-				$found = true;
-				break;
-			}
-		}
-
-		if(!$found){
-			$count = 0;
-			foreach($tag->ench as $key => $value){
-				if(is_numeric($key)){
-					$count++;
+		if(isset($tag->ench) and $tag->ench instanceof ListTag){
+			foreach($tag->ench as $entry){
+				if(!($entry instanceof CompoundTag)){ continue; }
+				if($this->enchantmentEntryId($entry) === (int) $ench->getId()){
+					if($found){ continue; }
+					// Preserve extension tags on the enchant entry as well as the item.
+					$entry = clone $entry;
+					$entry->id = new ShortTag("id", $ench->getId());
+					$entry->lvl = new ShortTag("lvl", $ench->getLevel());
+					$found = true;
 				}
+				$entries[] = $entry;
 			}
-			$tag->ench->{$count + 1} = new CompoundTag("", [
-				"id" => new ShortTag("id", $ench->getId()),
-				"lvl" => new ShortTag("lvl", $ench->getLevel())
-			]);
 		}
-
+		if(!$found){
+			$entries[] = new CompoundTag("", [new ShortTag("id", $ench->getId()), new ShortTag("lvl", $ench->getLevel())]);
+		}
+		$tag->ench = new ListTag("ench", $entries);
+		$tag->ench->setTagType(NBT::TAG_Compound);
 		$this->setNamedTag($tag);
+		return $this;
 	}
 
-	/**
-	 * @return Enchantment[]
-	 */
 	public function getEnchantments() : array{
-		if(!$this->hasEnchantments()){
-			return [];
-		}
-
+		if(!$this->hasEnchantments()){ return []; }
 		$enchantments = [];
-
 		foreach($this->getNamedTag()->ench as $entry){
-			$e = Enchantment::getEnchantment($entry["id"]);
-			$e->setLevel($entry["lvl"]);
-			$enchantments[] = $e;
+			$id = $this->enchantmentEntryId($entry);
+			if($id === null or (int) $entry["lvl"] <= 0){ continue; }
+			$e = Enchantment::getEnchantment($id);
+			if($e->getId() === $id){
+				$enchantments[$id] = $e->setLevel($this->getEnchantmentLevel($id));
+			}
 		}
-
-		return $enchantments;
+		return array_values($enchantments);
 	}
 
 	public function hasCustomName() : bool{

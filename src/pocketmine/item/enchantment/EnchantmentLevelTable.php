@@ -1,260 +1,93 @@
 <?php
 
-/*
- *
- *  _____   _____   __   _   _   _____  __    __  _____
- * /  ___| | ____| |  \ | | | | /  ___/ \ \  / / /  ___/
- * | |     | |__   |   \| | | | | |___   \ \/ /  | |___
- * | |  _  |  __|  | |\   | | | \___  \   \  /   \___  \
- * | |_| | | |___  | | \  | | |  ___| |   / /     ___| |
- * \_____/ |_____| |_|  \_| |_| /_____/  /_/     /_____/
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * @author iTX Technologies
- * @link https://mcper.cn
- *
- */
-
 namespace pocketmine\item\enchantment;
 
-use pocketmine\item\Armor;
 use pocketmine\item\Item;
-use pocketmine\utils\Range;
+use pocketmine\level\generator\ender\noise\JavaRandom;
 
+/** Minecraft 26.2 EnchantmentHelper restricted to the 25 legacy wire IDs. */
 class EnchantmentLevelTable{
+	// Preserve the source non_treasure tag's order, rather than the different old wire order.
+	private const TABLE_IDS = [0, 1, 2, 3, 4, 6, 8, 5, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
 
-	private static $map = [];
+	public static function init(){ /* Metadata is kept in Enchantment, avoiding two divergent tables. */ }
 
-	public static function init(){
-		self::$map = [
-			Enchantment::TYPE_ARMOR_PROTECTION => [
-				new Range(1, 21),
-				new Range(12, 32),
-				new Range(23, 43),
-				new Range(34, 54)
-			],
-
-			Enchantment::TYPE_ARMOR_FIRE_PROTECTION => [
-				new Range(10, 22),
-				new Range(18, 30),
-				new Range(26, 38),
-				new Range(34, 46)],
-
-			Enchantment::TYPE_ARMOR_FALL_PROTECTION => [
-				new Range(5, 12),
-				new Range(11, 21),
-				new Range(17, 27),
-				new Range(23, 33)
-			],
-
-			Enchantment::TYPE_ARMOR_EXPLOSION_PROTECTION => [
-				new Range(5, 17),
-				new Range(13, 25),
-				new Range(21, 33),
-				new Range(29, 41)
-			],
-
-			Enchantment::TYPE_ARMOR_PROJECTILE_PROTECTION => [
-				new Range(3, 18),
-				new Range(9, 24),
-				new Range(15, 30),
-				new Range(21, 36)
-			],
-
-			Enchantment::TYPE_WATER_BREATHING => [
-				new Range(10, 40),
-				new Range(20, 50),
-				new Range(30, 60)
-			],
-
-			Enchantment::TYPE_WATER_AFFINITY => [
-				new Range(10, 41)
-			],
-
-			Enchantment::TYPE_ARMOR_THORNS => [
-				new Range(10, 60),
-				new Range(30, 80),
-				new Range(50, 100)
-			],
-
-			//Weapon
-			Enchantment::TYPE_WEAPON_SHARPNESS => [
-				new Range(1, 21),
-				new Range(12, 32),
-				new Range(23, 43),
-				new Range(34, 54),
-				new Range(45, 65)
-			],
-
-			Enchantment::TYPE_WEAPON_SMITE => [
-				new Range(5, 25),
-				new Range(13, 33),
-				new Range(21, 41),
-				new Range(29, 49),
-				new Range(37, 57)
-			],
-
-			Enchantment::TYPE_WEAPON_ARTHROPODS => [
-				new Range(5, 25),
-				new Range(13, 33),
-				new Range(21, 41),
-				new Range(29, 49),
-				new Range(37, 57)
-			],
-
-			Enchantment::TYPE_WEAPON_KNOCKBACK => [
-				new Range(5, 55),
-				new Range(25, 75)
-			],
-
-			Enchantment::TYPE_WEAPON_FIRE_ASPECT => [
-				new Range(10, 60),
-				new Range(30, 80)
-			],
-
-			Enchantment::TYPE_WEAPON_LOOTING => [
-				new Range(15, 65),
-				new Range(24, 74),
-				new Range(33, 83)
-			],
-
-			//Bow
-			Enchantment::TYPE_BOW_POWER => [
-				new Range(1, 16),
-				new Range(11, 26),
-				new Range(21, 36),
-				new Range(31, 46),
-				new Range(41, 56)
-			],
-
-			Enchantment::TYPE_BOW_KNOCKBACK => [
-				new Range(12, 37),
-				new Range(32, 57)
-			],
-
-			Enchantment::TYPE_BOW_FLAME => [
-				new Range(20, 50)
-			],
-
-			Enchantment::TYPE_BOW_INFINITY => [
-				new Range(20, 50)
-			],
-
-			//Mining
-			Enchantment::TYPE_MINING_EFFICIENCY => [
-				new Range(1, 51),
-				new Range(11, 61),
-				new Range(21, 71),
-				new Range(31, 81),
-				new Range(41, 91)
-			],
-
-			Enchantment::TYPE_MINING_SILK_TOUCH => [
-				new Range(15, 65)
-			],
-
-			Enchantment::TYPE_MINING_DURABILITY => [
-				new Range(5, 55),
-				new Range(13, 63),
-				new Range(21, 71)
-			],
-
-			Enchantment::TYPE_MINING_FORTUNE => [
-				new Range(15, 55),
-				new Range(24, 74),
-				new Range(33, 83)
-			],
-
-			//Fishing
-			Enchantment::TYPE_FISHING_FORTUNE => [
-				new Range(15, 65),
-				new Range(24, 74),
-				new Range(33, 83)
-			],
-
-			Enchantment::TYPE_FISHING_LURE => [
-				new Range(15, 65),
-				new Range(24, 74),
-				new Range(33, 83)
-			]
-		];
-	}
-
-	/**
-	 * @param Item $item
-	 * @param int  $modifiedLevel
-	 * @return Enchantment[]
-	 */
+	/** At most one (highest applicable) level per enchantment. All bounds are inclusive. */
 	public static function getPossibleEnchantments(Item $item, int $modifiedLevel){
 		$result = [];
-
-		$enchantmentIds = [];
-
-		if($item->getId() == Item::BOOK){
-			$enchantmentIds = self::$map;
-		}elseif($item->isArmor()){
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_FIRE_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_EXPLOSION_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_PROJECTILE_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_THORNS; 
-
-			if($item->isBoots()){
-				$enchantmentIds[] = Enchantment::TYPE_ARMOR_FALL_PROTECTION; 
+		foreach(self::TABLE_IDS as $id){
+			if(!Enchantment::canEnchantItem($item, $id, true)){ continue; }
+			for($level = Enchantment::getEnchantMaxLevel($id); $level >= 1; --$level){
+				[$min, $max] = Enchantment::getEnchantMinMaxAbility($id, $level);
+				if($modifiedLevel >= $min && $modifiedLevel <= $max){
+					$result[] = Enchantment::getEnchantment($id)->setLevel($level);
+					break;
+				}
 			}
-
-			if($item->isHelmet()){
-				$enchantmentIds[] = Enchantment::TYPE_WATER_BREATHING; 
-				$enchantmentIds[] = Enchantment::TYPE_WATER_AFFINITY; 
-			}
-
-		}elseif($item->isSword()){
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_SHARPNESS; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_SMITE; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_ARTHROPODS; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_KNOCKBACK; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_FIRE_ASPECT; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_LOOTING; 
-
-		}elseif($item->isTool()){
-			$enchantmentIds[] = Enchantment::TYPE_MINING_EFFICIENCY; 
-			$enchantmentIds[] = Enchantment::TYPE_MINING_SILK_TOUCH; 
-			$enchantmentIds[] = Enchantment::TYPE_MINING_FORTUNE; 
-
-		}elseif($item->getId() == Item::BOW){
-			$enchantmentIds[] = Enchantment::TYPE_BOW_POWER; 
-			$enchantmentIds[] = Enchantment::TYPE_BOW_KNOCKBACK; 
-			$enchantmentIds[] = Enchantment::TYPE_BOW_FLAME; 
-			$enchantmentIds[] = Enchantment::TYPE_BOW_INFINITY; 
-
-		}elseif($item->getId() == Item::FISHING_ROD){
-			$enchantmentIds[] = Enchantment::TYPE_FISHING_FORTUNE; 
-			$enchantmentIds[] = Enchantment::TYPE_FISHING_LURE; 
-
 		}
+		return $result;
+	}
 
-		if($item->isTool() || $item->isArmor()){
-			$enchantmentIds[] = Enchantment::TYPE_MINING_DURABILITY; 
+	/** Source EnchantmentHelper.getEnchantmentCost; each option draws its own base. */
+	public static function getEnchantmentCost(JavaRandom $random, int $slot, int $bookshelves, Item $item) : int{
+		if($slot < 0 || $slot > 2 || Enchantment::getEnchantAbility($item) <= 0){ return 0; }
+		$bookshelves = max(0, min(15, $bookshelves));
+		$selected = $random->nextInt(8) + 1 + ($bookshelves >> 1) + $random->nextInt($bookshelves + 1);
+		if($slot === 0){ return max(intdiv($selected, 3), 1); }
+		return $slot === 1 ? intdiv($selected * 2, 3) + 1 : max($selected, $bookshelves * 2);
+	}
+
+	/** Optional explicit Java random source makes source-derived fixtures reproducible. */
+	public static function selectEnchantments(Item $item, int $cost, ?JavaRandom $random = null) : array{
+		$ability = Enchantment::getEnchantAbility($item);
+		if($ability <= 0 || $cost <= 0){ return []; }
+		$random = $random ?? new JavaRandom(mt_rand(0, 0x7fffffff));
+		$cost += 1 + $random->nextInt(intdiv($ability, 4) + 1) + $random->nextInt(intdiv($ability, 4) + 1);
+		// Java rounds each float arithmetic step to float32.
+		$span = self::f32(self::f32(self::f32($random->nextFloat() + $random->nextFloat()) - 1.0) * self::f32(0.15));
+		$cost = max(1, (int) floor(self::f32($cost + self::f32($cost * $span)) + 0.5));
+		$possible = self::getPossibleEnchantments($item, $cost);
+		if(count($possible) === 0){ return []; }
+		$result = [self::chooseWeighted($possible, $random)];
+		while($random->nextInt(50) <= $cost){
+			$last = $result[count($result) - 1];
+			$possible = array_values(array_filter($possible, function(Enchantment $candidate) use ($last){ return $last->isCompatibleWith($candidate); }));
+			if(count($possible) === 0){ break; }
+			$result[] = self::chooseWeighted($possible, $random);
+			$cost = intdiv($cost, 2);
 		}
+		return $result;
+	}
 
-		foreach($enchantmentIds as $enchantmentId) {
-			$enchantment = Enchantment::getEnchantment($enchantmentId);
-            $ranges = self::$map[$enchantmentId];
-            $i = 0;
-			/** @var Range $range */
-			foreach($ranges as $range) {
-	            $i++;
-	            if($range->isInRange($modifiedLevel)){
-		            $result[] = $enchantment->setLevel($i);
-	            }
-            }
-        }
+	/** Three stable offers for a seed/item/bookshelf snapshot, as EnchantmentMenu does. */
+	public static function generateOffers(Item $item, int $bookshelves, int $seed) : array{
+		if($item->getCount() !== 1 || $item->hasEnchantments() || Enchantment::getEnchantAbility($item) <= 0){ return []; }
+		$random = new JavaRandom($seed);
+		$costs = [];
+		for($slot = 0; $slot < 3; ++$slot){
+			$cost = self::getEnchantmentCost($random, $slot, $bookshelves, $item);
+			$costs[$slot] = $cost >= $slot + 1 ? $cost : 0;
+		}
+		$entries = [];
+		for($slot = 0; $slot < 3; ++$slot){
+			$random->setSeed($seed + $slot);
+			$list = $costs[$slot] > 0 ? self::selectEnchantments($item, $costs[$slot], $random) : [];
+			if($item->getId() === Item::BOOK && count($list) > 1){ array_splice($list, $random->nextInt(count($list)), 1); }
+			$entries[$slot] = new EnchantmentEntry($list, count($list) > 0 ? $costs[$slot] : 0, 'bless', $slot + 1);
+		}
+		return $entries;
+	}
 
-        return $result;
-    }
+	private static function chooseWeighted(array $candidates, JavaRandom $random) : Enchantment{
+		$total = 0;
+		foreach($candidates as $candidate){ $total += Enchantment::getEnchantWeight($candidate->getId()); }
+		$choice = $random->nextInt($total);
+		foreach($candidates as $candidate){
+			$choice -= Enchantment::getEnchantWeight($candidate->getId());
+			if($choice < 0){ return clone $candidate; }
+		}
+		throw new \LogicException('Invalid enchantment weights');
+	}
 
+	private static function f32(float $value) : float{ return unpack('fvalue', pack('f', $value))['value']; }
 }

@@ -31,6 +31,19 @@ use pocketmine\utils\Random;
 
 abstract class Generator{
 	private static $list = [];
+	protected array $structureOptions = [];
+	private ?\pocketmine\level\generator\structure\NaturalStructures $naturalStructures = null;
+
+	public function structureEngine(ChunkManager $level) : ?\pocketmine\level\generator\structure\NaturalStructures{
+		if(($this->structureOptions['structures'] ?? true) === false || !in_array(strtolower($this->getName()), ['normal', 'nether', 'ender'], true)){
+			return null;
+		}
+		return $this->naturalStructures ??= new \pocketmine\level\generator\structure\NaturalStructures($this, $level, $this->structureOptions);
+	}
+
+	public function populateStructures(ChunkManager $level, int $x, int $z) : array{
+		return $this->structureEngine($level)?->populate($level, $x, $z) ?? [];
+	}
 
 	public static function addGenerator($object, $name){
 		if(is_subclass_of($object, Generator::class) and !isset(Generator::$list[$name = strtolower($name)])){

@@ -134,10 +134,21 @@ dserver:
  #服务器列表，用;隔开，例如 1.example.com:19132;2.example.com:19133
  server-list: ""
  
+# MCP-Reborn 26.2 建筑；新区块生效。spacing 为区域间距（区块），可按系列禁用。
+structures:
+  enabled: true
+  families:
+    village: {enabled: true, spacing: 28}
+    pillager_outpost: {enabled: true, spacing: 32}
+    woodland_mansion: {enabled: true, spacing: 64}
+    end_city: {enabled: true, spacing: 20}
+    bastion: {enabled: true, spacing: 28}
+    nether_fortress: {enabled: true, spacing: 28}
+
 ai:
  #AI总开关
- enable: false
- #僵尸的AI，0为关闭，1为1.0版AI，2为新AI（不完善）
+ enable: true
+ #僵尸 AI：0 关闭，非零启用共享 26.2 行为控制器
  zombie: 1
  #僵尸猪人的AI
  pigzombie: true
@@ -161,3 +172,20 @@ ai:
  creeper-explode-destroy-block: false
  #是否允许自动生成生物
  mobgenerate: false
+ #Shared 26.2 behavior profiles for the remaining registered mobs
+ wolf: true
+ ocelot: true
+ rabbit: true
+ villager: true
+ spider: true
+ cave-spider: true
+ slime: true
+ magma-cube: true
+ silverfish: true
+ enderman: true
+ blaze: true
+ ghast: true
+ bat: true
+ squid: true
+ #Allow sheep grazing to alter grass/plants; does not control explosion terrain damage
+ mob-griefing: false

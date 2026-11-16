@@ -24,7 +24,7 @@ namespace pocketmine\entity;
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\Player;
 
-class LavaSlime extends Living{
+class LavaSlime extends Creature{
 	const NETWORK_ID = 42;
 
 	const DATA_SLIME_SIZE = 16;

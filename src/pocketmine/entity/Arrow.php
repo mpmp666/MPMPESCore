@@ -41,10 +41,46 @@ class Arrow extends Projectile{
 	protected $damage = 2;
 
 	protected $isCritical;
+	protected $punch = 0;
+	protected $pickupAllowed = true;
+
+	public function setBaseDamage(float $damage){ $this->damage = max(0, $damage); }
+	public function getBaseDamage() : float{ return (float) $this->damage; }
+	public function setPunch(int $level){ $this->punch = max(0, $level); }
+	public function getPunch() : int{ return $this->punch; }
+	public function isCritical() : bool{ return $this->isCritical; }
+	public function setPickupAllowed(bool $allowed){ $this->pickupAllowed = $allowed; }
+	public function canBePickedUp(Player $player) : bool{ return $this->pickupAllowed || $player->isCreative(); }
+
+	public function applyPunch(Living $victim){
+		$length = sqrt($this->motionX * $this->motionX + $this->motionZ * $this->motionZ);
+		if($this->punch > 0 and $length > 0){
+			$victim->setMotion($victim->getMotion()->add($this->motionX / $length * $this->punch * 0.6, 0.1, $this->motionZ / $length * $this->punch * 0.6));
+		}
+	}
+
+	/** Same speed * base damage and independent critical roll as AbstractArrow. */
+	public function hitDamage(float $speed, int $criticalRoll = -1) : int{
+		$damage = (int) ceil(max(0, $speed * $this->damage));
+		if($this->isCritical){
+			$damage += $criticalRoll >= 0 ? $criticalRoll : mt_rand(0, (int) ($damage / 2) + 1);
+		}
+		return $damage;
+	}
+
+	public function saveNBT(){
+		parent::saveNBT();
+		$this->namedtag->PickupAllowed = new \pocketmine\nbt\tag\ByteTag("PickupAllowed", $this->pickupAllowed ? 1 : 0);
+		$this->namedtag->Punch = new \pocketmine\nbt\tag\ShortTag("Punch", $this->punch);
+		$this->namedtag->ArrowDamage = new \pocketmine\nbt\tag\DoubleTag("ArrowDamage", $this->damage);
+	}
 
 	public function __construct(FullChunk $chunk, CompoundTag $nbt, ?Entity $shootingEntity = null, $critical = false){
 		$this->isCritical = (bool) $critical;
 		parent::__construct($chunk, $nbt, $shootingEntity);
+		if(isset($nbt->PickupAllowed)){ $this->pickupAllowed = (bool) $nbt["PickupAllowed"]; }
+		if(isset($nbt->Punch)){ $this->setPunch((int) $nbt["Punch"]); }
+		if(isset($nbt->ArrowDamage)){ $this->setBaseDamage((float) $nbt["ArrowDamage"]); }
 	}
 
 	public function onUpdate($currentTick){

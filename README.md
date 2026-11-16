@@ -48,10 +48,16 @@
 | **主世界** | Normal | 原版生态群系、洞穴、结构 |
 | **地狱** | Nether | 石英矿、辉石、熔岩湖、地狱要塞 |
 | **星界 (Astral)** | Astral | 末地石浮岛 + **按种子生成的小荧石岛**（无黑曜石柱） |
-| **末地 (Ender)** | Ender | 主岛 + 10 根环形黑曜石柱（去掉中心柱）、外岛带、末影人 |
+| **末地 (Ender)** | Ender | 26.2 原版基础噪声、0,0 主岛、十根柱/铁笼、外岛、原版末地城布局；旧版材质与高度限制详见说明 |
 
 - `genisys.yml` 中通过 `astral.allow-astral`、`ender.allow-ender`、`nether.allow-nether` 独立开关
 - 维度名称可自定义（`astral.level-name`、`ender.level-name`、`nether.level-name`）
+
+### 生物 AI 与附魔（26.2 参考适配）
+
+当前 26 类生物已接入共享行为与有界导航控制器，修复重复 tick，加入视线、仇恨、受击逃跑、食物引诱/繁殖、弓箭/蓄爆和类别差异；默认启用。附魔保留旧协议 0–24 ID，按 26.2 修正规则、附魔台/铁砧费用与结果验证，并修复伤害、护甲、工具、弓箭和钓鱼效果。
+
+生物行为/导航 107 项、附魔规则/容器 6,991 项、效果 73 项及独立实服 26 类生物/106 项整合检查通过。完整范围和旧协议差异见 [中文使用说明](docs/AI_ENCHANT_26_2_使用说明.md)、[AI 覆盖清单](docs/AI_26_2.md)、[附魔规则](docs/ENCHANTMENTS_26_2.md)。村民现代 Brain、现代新生物和全部新机制仍未完整移植，不能等同完整 Java 26.2 服务端。
 
 ### ⚡ MPApi 1.1 —— 高性能插件 API
 
@@ -180,6 +186,21 @@
 - **Synapse API 预留**：`synapse.enabled` 支持跨服通信（需外部 Synapse 服务端）
 - **多服统一查询**：`dserver` 支持多服务器 Motd/Query 聚合
 - **JSON 配方/创造物品表**：`recipes-from-json`、`creative-items-from-json` 可选读取外部 JSON
+
+## 原版建筑移植（MCP-Reborn 26.2）
+
+已导入 **1,212 个建筑模板、188 个拼图池**，包含五类村庄、僵尸村庄、掠夺者前哨站、末地城/船、林地府邸、堡垒遗迹、远古城市、试炼密室、沉船、海底废墟等。主世界、地狱、末地的新区块按种子自然生成；旧地图已生成区块保留。末地外岛已补齐。
+
+- `/structure list` 查看类型；`/locate village` 或 `/locate structure minecraft:village` 后台搜索并证明最近村庄，兼容 `/structure locate`。
+- `/tp Steve world ender 100 49 0` 跨世界传送，保留旧版玩家互传、坐标和相对坐标语法；详见 [传送指令说明](docs/TELEPORT.md)。
+- 默认末地名为 `ender`，新建时继承主世界种子；已有末地不会自动重建。源码对照、升级提示和已知限制见 [26.2 末地说明](docs/END_26_2.md)。
+- `/structure place village 100 70 100 snowy` 手动放置雪地村庄；也可指定模板完整路径。
+- `genisys.yml` 的 `structures` 控制总开关和各类型间距。
+- 旧版不存在的方块使用记录在案的替代材质；无模板的神殿、要塞等采用有界程序化适配。新版掠夺者 AI、袭击、传送门功能和部分战利品并未一并移植。
+
+完整范围、限制、测试结果与命令见 [建筑移植说明](STRUCTURES.md)。
+
+![建筑几何预览（离线模型，非客户端截图）](docs/structure-preview.png)
 
 ## 运行环境要求
 

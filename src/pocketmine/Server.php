@@ -1324,6 +1324,10 @@ class Server{
 			$this->levels[$level->getId()] = $level;
 
 			$level->initLevel();
+			if($generator === Ender::class){
+				// Vanilla arrival platform, configured before background spawn generation.
+				$level->setSpawnLocation(new \pocketmine\math\Vector3(100, 49, 0));
+			}
 
 			$level->setTickRate($this->baseTickRate);
 		}catch(\Throwable $e){
@@ -1688,7 +1692,11 @@ class Server{
 			"pigzombie" => $this->getAdvancedProperty("ai.pigzombie", true),
 			"creeperexplode" => $this->getAdvancedProperty("ai.creeper-explode-destroy-block", false),
 			"mobgenerate" => $this->getAdvancedProperty("ai.mobgenerate", false),
+			"mobgriefing" => $this->getAdvancedProperty("ai.mob-griefing", false),
 		];
+		foreach(['mooshroom'=>'cow','wolf'=>'wolf','ocelot'=>'ocelot','rabbit'=>'rabbit','villager'=>'villager','zombievillager'=>'zombie','spider'=>'spider','cavespider'=>'cave-spider','slime'=>'slime','lavaslime'=>'magma-cube','silverfish'=>'silverfish','enderman'=>'enderman','blaze'=>'blaze','ghast'=>'ghast','bat'=>'bat','squid'=>'squid'] as $type=>$key){
+			$this->aiConfig[$type]=$this->getAdvancedProperty('ai.'.$key,true);
+		}
 		$this->inventoryNum = min(91, $this->getAdvancedProperty("player.inventory-num", 36));
 		$this->hungerTimer = $this->getAdvancedProperty("player.hunger-timer", 80);
 		$this->allowSnowGolem = $this->getAdvancedProperty("server.allow-snow-golem", false);
@@ -2109,7 +2117,8 @@ class Server{
 
 			if($this->enderEnabled){
 				if(!$this->loadLevel($this->enderName)){
-					$this->generateLevel($this->enderName, time(), Generator::getGenerator("ender"));
+					$endSeed = $this->getAdvancedProperty('ender.seed', $this->getDefaultLevel()->getSeed());
+					$this->generateLevel($this->enderName, (int)$endSeed, Generator::getGenerator("ender"));
 				}
 				$this->enderLevel = $this->getLevelByName($this->enderName);
 			}
@@ -3307,6 +3316,8 @@ private function lookupAddress($address) {
 		Entity::registerEntity(FallingSand::class);
 		Entity::registerEntity(PrimedTNT::class);
 		Entity::registerEntity(Snowball::class);
+		// A textual save/factory ID only; do not replace a legacy packet type.
+		Entity::registerEntity(\pocketmine\entity\Fireball26::class, true);
 		Entity::registerEntity(Villager::class);
 		Entity::registerEntity(Zombie::class);
 		Entity::registerEntity(Squid::class);
