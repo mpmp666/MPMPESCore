@@ -25,3 +25,11 @@ PocketMine-MP-5.44.3/
 server.properties
 pocketmine.yml
 genisys.yml
+# Python import/conversion cache
+__pycache__/
+*.pyc
+# Local production receipts; publish reproducible isolated test results instead
+/docs/end26-live-results.json
+/docs/ai-enchant26-live-results.json
+# One-off verifier tied to the local production world, not a public fixture
+/tools/fixtures/End26Verify/
