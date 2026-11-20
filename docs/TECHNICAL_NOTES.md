@@ -1,0 +1,135 @@
+# 功能与协议技术说明
+
+[返回 README](../README.md) · [兼容性与已知问题](../README.md#客户端兼容性)
+
+这里保留从项目 README 整理的 API、frp、多协议翻译、性能优化与玩法修复细节。部署步骤与当前兼容性摘要请先阅读 README；下文记录的真机测试范围来自项目既有说明，不代表所有版本的全部功能都已验证。
+
+## ⚡ MPApi 1.1 —— 高性能插件 API
+
+原始方块接口避免分配 `Block` 对象、污染方块缓存或触发区块加载，适合大规模循环/批量操作；同时提供以下查询与管理接口：
+
+- **原始方块读写**：`getFullStateAt()` / `setBlockRaw()` / `fillBlocksRaw()` —— 避免分配 `Block` 对象
+- **碰撞查询**：`getEntityCollidingBlocks()` / `isBlockSolidAt()` —— 按列走 chunk 索引
+- **实体检索**：`getNearbyEntities()` —— AABB 三轴扩展，走区块实体索引不遍历全表
+- **高度图**：`getHighestBlockAt()` —— 基于 chunk heightMap，零扫描开销
+- **AI 控制器**：`getAI()` —— 刷怪、仇恨半径、追击速度动态调整
+- **地图媒体 API**：`createDynamicMap()` / `setMapImageFromFile()` / `getMapItem()` —— 支持 **Bad Apple 视频播放**、**图片展示**、**物品展示框渲染**（动态地图 ID 从 20000 起，不落盘，重登需补发）
+- **frp 隧道 API**：`isFrpEnabled()` / `getFrpTunnels()` / `restartFrp()` / `stopFrp()`，1.1 新增单隧道控制 `restartFrpTunnel($name)` / `stopFrpTunnel($name)` / `startFrpTunnel($name)` 与免重启重扫配置 `reloadFrpTunnels()`
+- **玩家真实地址**：`getPlayerAddress()` / `getPlayerPort()` / `getPlayerEntryAddress()` —— 经 PROXY v2 还原
+- **玩家协议版本**（MPApi 1.1）：`getPlayerProtocol()` 返回实际协议号，0.11.x=21–33、0.12.x=34、0.13.x=37/38/39、0.14.x=45/46/60/70、0.15.x=81/82/83、0.16.x=90/91；`isNewProtocolPlayer()` 判断是否使用 0.15 及之后的新版线路格式（包含 0.16）
+
+> 插件在 `plugin.yml` 声明 `mpapi: "1.1"` 即可使用；版本高于服务端的插件会被自动禁用。
+
+## 🚇 内置 frp 内网穿透（无需独立 frpc 进程）
+
+需要外部 frps 服务端；内置客户端不表示无需中转服务。
+
+- 服务器根目录放 `frp.toml`（默认）或 `frp_<名字>.toml`（多隧道）即可自动启动
+- 纯 PHP 实现 `frpc.php`，与服务端同进程/线程非阻塞运行，**无额外 PID、无额外日志文件**
+- 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
+- 指令 `/frp [status|start|restart|stop|reload] [隧道名]`（仅 OP/控制台）管理隧道：`status` 查看（含 frps 地址/远程端口/TLS/run_id），`restart`/`stop`/`start` 支持单隧道名，`reload` 免重启重扫 `frp*.toml`（新增自动启动、变更自动重启、删除自动停止）
+
+## 🔀 跨版本互通：0.11 / 0.12 / 0.13 / 0.14 / 0.15 / 0.16 同图同端口
+
+> ⚠️ **0.16（协议 90/91）已可接入，主要接入问题如下；地图相关限制同时见 [README](../README.md#客户端兼容性)：**
+> - **0.16 生存模式在陆地上会一直显示氧气条（气泡条）**
+> - **0.16 的斜杠指令存在问题**（客户端本地校验后回显"用法"，不往服务端发包）
+>
+> 项目已有真机记录验证的范围包括：创造移速正常、生物不再被拴绳、暂停菜单不重复自己、能看见其他玩家、可与 0.14 玩家同时在线、同一账号 0.14 退出后 0.16 可正常进入。
+> 详细 TODO 写在 `network/MultiProtocol.php::translateOutgoing16()` 与 `Player.php` 的 CommandStep 分支注释里。
+
+**我们支持 0.11 到 0.16 互通。** 同一个端口同时接受 **MCPE 0.11.x**（协议 21–33，实测正式版为 27）、**MCPE 0.12.x**（协议 34）、**MCPE 0.13.x**（协议 37/38/39）、**MCPE 0.14.x**（协议 45/46/60/70）、**MCPE 0.15.x**（协议 81-83）与 **MCPE 0.16.x**（协议 90/91）客户端，六类玩家在同一张地图上一起玩：
+
+- **0.11 支持（协议 21–33，family 5 翻译层，已真机实测可用）**：0.11 使用完全独立的封包 ID 空间（`0x82..0xb1`）与旧版字段布局，`MultiProtocol` 使用 family 5 全量翻译：
+  - 封包 ID 按语义映射（非偏移），如 `LOGIN 0x82→0x8f`、`BATCH 0xb1→0x92`、`TILE_EVENT 0x95→BLOCK_EVENT 0xa3`
+  - 协议号按区间识别（21–33），实测 0.11.0 正式版发的是 **协议 27**（不是 alpha 的 23），所以不能只匹配 23
+  - 登录包无 UUID/skinName：clientId 为 int32，slim 标志 1 字节，服务端自动生成随机 UUID 并推导 skinName
+  - 物品槽为旧版 5 字节格式（short id + byte count + short damage），无 NBT 长度字段
+  - `StartGamePacket` 缺少 dimension 字节与尾部字段；`ContainerOpenPacket` 缺少 entityId；`AdventureSettingsPacket` 缺少 permission 字段
+  - `SetSpawnPositionPacket` 字段顺序为 x(int), z(int), y(byte)；`BlockEntityDataPacket` 的 y 为 byte
+  - `SetTimePacket` 时间换算为 19200 制，started 按实际值映射为 0x80/0x00
+  - `AddPlayerPacket` 使用 clientID(long) 替代 UUID，携带 slim 标志与皮肤数据；`RemovePlayerPacket` 同理
+  - `PlayerListPacket` 在 0.11 不存在，出站直接丢弃
+  - **模式切换**：0.11 没有 `SetPlayerGameTypePacket`，改为重发 `StartGamePacket`（带新 gamemode）+ `AdventureSettings`，与参考端一致
+  - **创造栏**：按 0.11 官方 `initCreativeItems()` 的 **246 个 (id:meta) 精确条目**过滤；0.11 客户端校验的是 id+meta 组合，下发任意一个它不认识组合都会在打开创造背包时闪退
+  - 批量包内层为裸 [pid][payload] 拼接（无长度前缀），外层仍为 [0xb1][int len][zlib]
+  - **区块包**：`[0xaf][int x][int z][int len][裸数据]` —— 不做内层 zlib、不带 x/z 前缀，区块数据保持世界存储的列顺序（McRegion 为 `x<<11|z<<7|y`），第 256 字节字段是**高度图**（不是 biomeId，发错会导致玩家悬空坠落）
+  - 区块不走缓存，每次实时转换（0.11 载荷格式与 0.12–0.16 差异过大，复用缓存收益低）
+  - RakNet 封装无前缀（与 0.12/0.13 相同）
+  - 参考服务端：[Steadfast2](https://github.com/SteadfastMC/Steadfast2)（PocketMine-MP 0.11.0 alpha build 5 源码）
+
+- **0.12 支持（协议 34，已真机实测可用）**：0.12 与 0.13 共用同一套封包 ID（`0x8f..0xca`）与全部基元（`putSlot`/`putString`/`putUUID`/`writeMetadata` 逐字节一致），所以 0.12 只需处理 4 处差异，其余 50+ 个包零修改直通：
+  - `ContainerSetSlotPacket` 没有 0.14/0.13 插在 slot 与 item 之间的 `hotbarSlot(short)`（入站按 0.12 布局重解析、出站剥离该字段）
+  - `ChangeDimensionPacket` 写 4 字节 `int dimensionId`（0.14/0.13 写 `byte dim + byte 0`）
+  - `PlayerListPacket` TYPE_ADD 条目用 1 字节 `slim` 标志代替 0.14 的 `skinName` 字符串
+  - `CraftingDataPacket` 的 shaped 配方材料槽遍历顺序为 `(z<height, x<width)`（0.14/0.13 是 `(z<width, x<height)`，只影响非方形配方）
+- **0.12 创造栏白名单**：创造物品栏按 0.12 自己的清单（236 个 id，提取自 Prismarine-0.12 `initCreativeItems`）下发，0.12 不认识的物品一律不下发（0.12 认识的物品比 0.13 还少，参照服务端为 Prismarine-0.12）。配方表同样按 0.12 白名单过滤
+- **登录三格式嗅探**：`LoginPacket` 自动识别 0.11 旧版明文布局（int32 clientId + slim byte）、0.12/0.13/0.14 明文布局与 0.15/0.16 JWT 链（zlib + chain/skin token；0.16 多一个 gameEdition 字节且压缩长度为 varint），玩家名 / UUID / 皮肤 / 地址全部正常还原；0.13.0（协议 37）自动补齐缺失字段；0.12（协议 34）尾部是 1 字节 `slim` 标志而非 `skinName` 字符串；0.11（协议 21–33）无 UUID 字段，服务端自动生成
+- **封包 ID 全量重映射**：0.15.0 把全部封包 ID 从 `0x8f..0xca` 改为 `0x01..0x41`，0.16 又插入资源包握手整体偏移到 `0x01..0x4f`，`MultiProtocol` 持两张映射表按玩家协议逐个翻译
+- **0.16 全量重编码**：0.16 把基础类型全换了——字符串 varint 前缀、物品 slot 改 `varint id + varint(damage<<8|count)`、实体 ID 改 zigzag varint、坐标改 `varint x + byte y + varint z`、浮点改小端、metadata 改字典式，出站包从对象属性逐字段重编码，入站包解析回原生对象，`Player.php` 逻辑零改动
+- **0.16 资源包握手与指令表**：登录后自动补发空 `ResourcePacksInfoPacket`（我们不发资源包）；`StartGame` 之后按参考端（Genisys 0.16）的时序下发 `AvailableCommandsPacket` 指令表（JSON 结构已与参考端逐字节一致），0.16 客户端的斜杠指令走 `CommandStepPacket`，已接入指令调度（**但有上述已知问题**）
+- **字段级布局适配**：`UpdateBlockPacket`/`SetEntityMotionPacket` 在 0.15/0.16 拆为单条记录；`MoveEntityPacket` 拆分为单实体+字节旋转；`AddEntityPacket` 旋转缩放；`ChangeDimensionPacket` 补 xyz；`RemovePlayerPacket` 映射为 `RemoveEntityPacket`；0.16 配方表 varint 重编码
+- **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15/0.16 用 `0xfe` 前缀，0.11/0.12/0.13 无前缀，出站按玩家协议分别封装
+- **批量包按协议分组**：广播/批量压缩流按 0.11/0.12/0.13/0.14/0.15/0.16 六条线路各压一份（0.11 内层为裸拼接、0.16 内层帧为 varint 长度），互不串包；入站批量包按玩家协议解析（真实 0.13 客户端会把登录包塞进 BatchPacket，已兼容）
+- **区块缓存按协议分组**：同一区块的压缩批包按线路各缓存一份（0.12/0.13 与 0.14 共用同一份，区块载荷完全相同；0.11 因格式差异过大绕过缓存走实时翻译），内存友好
+- **生物拴绳显示修复**：0.15/0.16 客户端需要 metadata 里的 `DATA_LEAD_HOLDER=-1` / `DATA_LEAD=0`（0.16 为 `DATA_LEAD_HOLDER_EID=38`），缺失时所有生物都会显示被拴着——翻译层已自动注入
+- **0.13 创造栏白名单过滤**：创造物品栏严格按 0.13 官方创造清单（245 个 id，提取自 Genisys 0.13 `initCreativeItems`）下发，0.14 新增物品（地图、漏斗、侦测器等）一律不下发 —— 否则 0.13 客户端在**新号加载地形 / 生存模式打开背包**时会直接闪退
+- **0.13 创造取物快速路径**：0.13 创造模式取物走 `ContainerSetSlotPacket` 直改背包（与 Genisys 0.13 行为一致），绕开交易组校验（交易组会拒绝 `source=air` 的创造取物导致拿不出东西）
+- **MOTD 保持 0.14 原生公告**（协议 70），0.11/0.12/0.13/0.15/0.16 客户端直接连即可（与 axe.ink 同款方案）
+
+> 注：0.13.0（协议 37）因客户端登录包缺字段会被判为无效皮肤（与原版 Genisys 0.13 行为一致），请使用 **0.13.1 / 0.13.2**。0.16 暂不支持地图物品数据包（MPApi 地图功能对 0.16 客户端自动降级为不发送）。
+>
+> 0.16 剩余问题追踪：**① 生存模式陆地上的氧气条** —— 参考端（Genisys 0.16）给玩家的 metadata 只发 nametag、完全不发 `DATA_AIR`/`DATA_MAX_AIR`，我们已同样跳过，但真机仍显示，待进一步定位；**② 指令** —— 服务器链路正常（模拟器发 CommandStep 后客户端能收到 `SetPlayerGameType`）、指令表 JSON 已与参考端一致，真机仍被客户端本地拦截，待真机抓 `0x4b`/`0x4c` 原始字节继续排查
+
+> 参考服务端：0.11 的对照基于 **Steadfast2**（PocketMine-MP 0.11.0 alpha build 5 源码，<https://github.com/SteadfastMC/Steadfast2>）；0.12 的字段差异对照基于 **Prismarine-0.12**（对照官方 `MCPE_0.12.1.apk` 逐字段比对）；0.16 的对照基于 Genisys 0.16。
+
+## 🚀 深度性能优化（磁盘 I/O · 内存 · CPU · 事件）
+
+- **磁盘 I/O**：
+  - 日志写盘改为**持久句柄 + 64KB 缓冲批量写**，替代原来每行日志一次 open/write/close
+  - RegionLoader 流缓冲区 16KB → **256KB**，区块读写 syscall 大幅减少
+  - 区块保存写入改用共享零块补齐扇区，省去每次保存一次全尺寸 `str_pad` 字符串复制
+- **内存**：
+  - 区块数据包缓存上限 768 → 256、方块对象缓存 2048 → 1024（每世界省约 20MB 峰值）
+  - 区块卸载批量 96 → 256/tick，低内存时回收更快
+  - 修复 `disable-log` 时日志队列无限增长的泄漏；修复关机时日志线程无法退出、尾部日志丢失的问题
+- **CPU**：
+  - 碰撞检测（`getCollisionCubes` / `getEntityCollidingBlocks`）先用共享实例做常量预检，**普通方块不再每次克隆 Block 对象**
+  - 实体运动更新内联长度计算、碰撞检测复用实体暂存向量，每实体每 tick 省多次对象分配
+  - 日志格式化重构：单次 `clean()` + 按需 `toANSI()`
+  - 实体/Tile 的 Timings 短类名改为字符串截取，去掉每次实体生成的 `ReflectionClass` 分配
+- **事件快速路径**：
+  - 新增 `Event::hasHandlers()` 静态方法；封包收发（×4）、`PlayerMoveEvent`、`EntityMotionEvent` 在**无插件监听时零分配跳过**，有插件监听时仍进入事件派发路径
+
+## 🛡️ 安全防护机制
+
+- **畸形 BatchPacket 死循环修复**：内层封包长度字段原来不做校验，攻击者构造负数长度（如 -4）可让主线程**永久死循环**；现已增加长度合法性检测，发现即**临时封禁该 IP 300 秒**并踢出玩家
+- **MOTD 探测洪水限流**：`UNCONNECTED_PING` 按 **5 秒滑窗**统计，窗口内超过 40 次即**临时封禁该 IP 120 秒**（本地 UDP 与 frp 喂包两条路径均生效）
+- **假人攻击拦截**：同一 IP 进入第 N 个账号（默认第 3 个）时，**踢出该 IP 全部已在线账号 + 临时封禁该 IP 300 秒**，新连接一并拒绝；使用 PROXY v2 时按还原后的玩家 IP 统计
+  - `genisys.yml` 可调：`server.max-accounts-per-ip: 3`（0 = 关闭）、`server.accounts-per-ip-ban-time: 300`
+
+## 🛠️ 漏斗 / 漏斗矿车 修复与增强
+
+- **Hopper（固定漏斗）**：
+  - 新增 `findFirstItem()` 通用取物方法，**不依赖 `firstOccupied()`**，兼容所有 `BaseInventory` 子类（箱子、熔炉、发射器等）
+  - 每 tick 仅吸 **1 个掉落物**，防止一 tick 吞掉整堆
+  - **已修复并排漏斗刷物 bug**：两个并排放置的漏斗同时拾取同一掉落物的问题，通过在拾取循环中增加 `isAlive` / `closed` 检查修复
+  - 红石锁定：`isPowered` 为 true 时暂停传输
+  - 8 tick 传输冷却，`transferCooldown` 纯 PHP 属性避免 NBT 序列化 NPE
+
+- **MinecartHopper（漏斗矿车）**：
+  - 实体 ID 96，自动吸取上方容器/掉落物、向下方容器推送
+  - 移动中同样工作，支持 NBT 持久化 `TransferCooldown`
+  - 已注册实体网络 ID，客户端可正常显示
+
+### 🐛 已知问题
+
+- **地图客户端崩溃**：玩家手持填充地图（Filled Map）时，客户端会崩溃。该问题在引入 FRP 直接喂包（frpc → RakNet）特性时出现，目前在局域网和 FRP 两种连接方式下均能复现。SCAXE 原版核心无此问题，已对比 RakNet 层代码但尚未定位到根因。
+
+## 🎮 其他特性
+
+- **Enderman 传送音效**：传送门触发、末影人传送均播放 `EndermanTeleportSound`
+- **末地时间锁定**：`ender` 维度时间永远锁定为夜晚（`Level::TIME_NIGHT`）
+- **Synapse API 预留**：`synapse.enabled` 支持跨服通信（需外部 Synapse 服务端）
+- **多服统一查询**：`dserver` 支持多服务器 Motd/Query 聚合
+- **JSON 配方/创造物品表**：`recipes-from-json`、`creative-items-from-json` 可选读取外部 JSON

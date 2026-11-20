@@ -1,264 +1,219 @@
-# MPMPESCore
+<p align="center">
+  <img src="docs/assets/logo.png" width="88" height="88" alt="MPMPESCore 项目图标：连接六个节点的方块字母 M">
+</p>
 
-**MPMPESCore** 是一个修改版的 Minecraft: 基岩版（MCPE）服务端核心，由 mpmpes 基于 **Genisys** 构建。**已实现 0.11 / 0.12 / 0.13 / 0.14 / 0.15 / 0.16 六版本同服互通。**
+<h1 align="center">MPMPESCore</h1>
 
-- 核心名称：`MPMPESCore`
-- 版本：`1.1`
-- 基于：[Genisys](https://github.com/iTXTech/Genisys)（iTX Technologies 出品的 PocketMine-MP 分支）
-- 源码：https://github.com/mpmp666/MPMPESCore
-- 此代码100%AI生成 请勿找茬
+<p align="center"><strong>六个版本，同一片方块世界。</strong></p>
 
-> 本核心是基于 Genisys 的修改构建。原版 Genisys 是 iTX Technologies LLC 制作的 PocketMine-MP 分支。
+<p align="center">
+  面向 MCPE 0.11–0.16 的跨版本服务端核心，基于 Genisys 构建。<br>
+  核心 1.1 · MPApi 1.1 · PHP 8.4 ZTS · LGPL-3.0-or-later
+</p>
 
-## 支持的客户端版本
+<p align="center">
+  <a href="#快速启动">快速启动</a> ·
+  <a href="#客户端兼容性">客户端兼容性</a> ·
+  <a href="#核心功能">核心功能</a> ·
+  <a href="#文档导航">文档导航</a> ·
+  <a href="https://github.com/mpmp666/MPMPESCore/issues">反馈问题</a>
+</p>
 
-同一个端口、同一张地图，同时支持以下六个大版本的 MCPE 客户端在线互通：
+![MPMPESCore 封面：六个 MCPE 版本连接同一世界的方块风格品牌插画](docs/assets/banner.png)
 
-| 客户端版本 | 协议号 | 接入方式 |
-|-----------|--------|---------|
-| **MCPE 0.11.x** | 21–33（正式版为 27） | family 5 翻译层（**本次新增**） |
-| MCPE 0.12.x | 34 | family 4 翻译层 |
-| MCPE 0.13.x | 37 / 38 / 39 | family 2 翻译层 |
-| MCPE 0.14.x | 45 / 46 / 60 / 70 | 原生（服务端基准协议 70） |
-| MCPE 0.15.x | 81 / 82 / 83 | family 1 翻译层 |
-| MCPE 0.16.x | 90 / 91 | family 3 翻译层 |
+**MPMPESCore** 由 mpmpes 基于 [Genisys](https://github.com/iTXTech/Genisys) 修改构建，让不同版本的 MCPE 客户端通过**同一个端口、同一张地图**联机。项目同时提供多维度生成、建筑模板适配、生物 AI 与附魔改进、MPApi 插件接口及内置 frp 客户端。
 
-> 0.11 支持已真机实测：登录与地形渲染正常。模式切换、创造背包已按参考端修复（0.11 无 `SetPlayerGameType` 包改为重发 `StartGame`；创造栏按 246 个 `(id:meta)` 精确条目过滤），如仍有异常请提 issue。详见下方「跨版本互通」章节。
+> **适用范围：**本项目面向旧版 MCPE 客户端；“26.2 参考适配”指部分建筑、末地生成、生物行为与附魔规则的移植，不表示支持现代客户端，也不等同于完整 Java 26.2 服务端。逐版本兼容性和已知问题见下表。
 
-## 使用到的 AI 模型
+## 客户端兼容性
 
-本仓库的全部代码、文档、示例均由 AI 生成 / 协作完成，使用到的模型包括：
+| 客户端 | 协议号 | 接入方式 | 使用提示 |
+| --- | --- | --- | --- |
+| **MCPE 0.11.x** | 21–33；正式版实测为 27 | family 5 翻译层 | 登录、地形已真机验证；模式切换与创造栏按参考端修复，仍需持续验证 |
+| **MCPE 0.12.x** | 34 | family 4 翻译层 | 已有真机接入验证；使用独立创造栏白名单 |
+| **MCPE 0.13.x** | 37 / 38 / 39 | family 2 翻译层 | 建议使用 **0.13.1 / 0.13.2**；0.13.0 登录包缺字段，可能被判为无效皮肤 |
+| **MCPE 0.14.x** | 45 / 46 / 60 / 70 | 原生协议 | 服务端基准协议为 **70** |
+| **MCPE 0.15.x** | 81 / 82 / 83 | family 1 翻译层 | 封包 ID、字段布局与 RakNet 封装适配 |
+| **MCPE 0.16.x** | 90 / 91 | family 3 翻译层 | 已可接入；保留以下已知限制 |
 
-- **DeepSeek v4 Flash 0731**
-- **Hy3**
-- **MiniMax M3**
-- **Nemotron 3 Ultra**
-- **GLM-5.3-Flash**
-- **MiMo V2.5 Free**
-- **Kimi K3**
-- **Hy4 preview**
-- **DeepSeek V4.1 Flash**
+![互通原理：六类 MCPE 客户端经单一 UDP 端口和 MultiProtocol 翻译层连接共享世界，基准协议为 70](docs/assets/compatibility.png)
 
-## ✨ 新增功能与改进
+**部署前请了解这些已知问题：**
 
-### 🌍 多维度世界生成
+- **0.16 氧气条：**生存模式在陆地上仍会显示气泡条。
+- **0.16 斜杠指令：**部分指令会被客户端本地校验拦截，回显“用法”而不向服务端发包。
+- **0.16 地图数据：**暂不支持地图物品数据包，MPApi 地图功能对该版本不发送数据。
+- **填充地图崩溃：**项目已有记录显示，玩家手持 Filled Map 会导致客户端崩溃，局域网与 frp 均可复现，根因尚未定位。使用地图媒体 API 前应先在测试环境验证。
 
-| 维度 | 生成器 | 特性 |
-|------|--------|------|
-| **主世界** | Normal | 原版生态群系、洞穴、结构 |
-| **地狱** | Nether | 石英矿、辉石、熔岩湖、地狱要塞 |
-| **星界 (Astral)** | Astral | 末地石浮岛 + **按种子生成的小荧石岛**（无黑曜石柱） |
-| **末地 (Ender)** | Ender | 26.2 原版基础噪声、0,0 主岛、十根柱/铁笼、外岛、原版末地城布局；旧版材质与高度限制详见说明 |
+协议细节、各版本修复范围与问题追踪见 [功能与协议技术说明](docs/TECHNICAL_NOTES.md)。表中的真机验证范围沿用项目已有记录，不代表逐版本、逐功能的完整验收。
 
-- `genisys.yml` 中通过 `astral.allow-astral`、`ender.allow-ender`、`nether.allow-nether` 独立开关
-- 维度名称可自定义（`astral.level-name`、`ender.level-name`、`nether.level-name`）
+## 快速启动
 
-### 生物 AI 与附魔（26.2 参考适配）
+### 1. 准备运行环境
 
-当前 26 类生物已接入共享行为与有界导航控制器，修复重复 tick，加入视线、仇恨、受击逃跑、食物引诱/繁殖、弓箭/蓄爆和类别差异；默认启用。附魔保留旧协议 0–24 ID，按 26.2 修正规则、附魔台/铁砧费用与结果验证，并修复伤害、护甲、工具、弓箭和钓鱼效果。
+项目已验证的环境为 **64 位 PHP 8.4 CLI + ZTS（线程安全）+ pmmpthread 6.x**，同时需要以下扩展：
 
-生物行为/导航 107 项、附魔规则/容器 6,991 项、效果 73 项及独立实服 26 类生物/106 项整合检查通过。完整范围和旧协议差异见 [中文使用说明](docs/AI_ENCHANT_26_2_使用说明.md)、[AI 覆盖清单](docs/AI_26_2.md)、[附魔规则](docs/ENCHANTMENTS_26_2.md)。村民现代 Brain、现代新生物和全部新机制仍未完整移植，不能等同完整 Java 26.2 服务端。
+```text
+sockets · curl · yaml · sqlite3 · zlib
+```
 
-### ⚡ MPApi 1.1 —— 高性能插件 API
+PHP 二进制可从 [pmmp/PHP-Binaries](https://github.com/pmmp/PHP-Binaries) 选择匹配的构建，确认其包含所需扩展。`bin/` **不随源码分发**，需要自行配置；目录名中的 `php7` 是沿用的启动脚本路径，不表示使用 PHP 7。
 
-零分配、零缓存污染、不触发区块加载的高性能接口，适合大规模循环/批量操作：
+| 平台 | 启动脚本默认查找的 PHP 路径 |
+| --- | --- |
+| Linux / macOS | `bin/php7/bin/php` |
+| Windows | `bin/php/php.exe` |
 
-- **原始方块读写**：`getFullStateAt()` / `setBlockRaw()` / `fillBlocksRaw()` —— 无 `Block` 对象分配，快数倍
-- **碰撞查询**：`getEntityCollidingBlocks()` / `isBlockSolidAt()` —— 按列走 chunk 索引
-- **实体检索**：`getNearbyEntities()` —— AABB 三轴扩展，走区块实体索引不遍历全表
-- **高度图**：`getHighestBlockAt()` —— 基于 chunk heightMap，零扫描开销
-- **AI 控制器**：`getAI()` —— 刷怪、仇恨半径、追击速度动态调整
-- **地图媒体 API**：`createDynamicMap()` / `setMapImageFromFile()` / `getMapItem()` —— 支持 **Bad Apple 视频播放**、**图片展示**、**物品展示框渲染**（动态地图 ID 从 20000 起，不落盘，重登需补发）
-- **frp 隧道 API**：`isFrpEnabled()` / `getFrpTunnels()` / `restartFrp()` / `stopFrp()`，1.1 新增单隧道控制 `restartFrpTunnel($name)` / `stopFrpTunnel($name)` / `startFrpTunnel($name)` 与免重启重扫配置 `reloadFrpTunnels()`
-- **玩家真实地址**：`getPlayerAddress()` / `getPlayerPort()` / `getPlayerEntryAddress()` —— 经 PROXY v2 还原
-- **玩家协议版本**（1.1 新增）：`getPlayerProtocol()` —— 0.12.x=34、0.13.x=37/38/39、0.14.x=45/46/60/70、0.15.x=81+；`isNewProtocolPlayer()` —— 是否 0.15 新版线路格式
-
-> 插件在 `plugin.yml` 声明 `mpapi: "1.1"` 即可使用；版本高于服务端的插件会被自动禁用。
-
-### 🚇 内置 frp 内网穿透（同进程零依赖）
-
-- 服务器根目录放 `frp.toml`（默认）或 `frp_<名字>.toml`（多隧道）即可自动启动
-- 纯 PHP 实现 `frpc.php`，与服务端同进程/线程非阻塞运行，**无额外 PID、无额外日志文件**
-- 支持 `transport.proxyProtocolVersion = "v2"`，RakLib 自动解析 PROXY 头，**还原玩家真实公网 IP/端口**
-- 指令 `/frp [status|start|restart|stop|reload] [隧道名]`（仅 OP/控制台）管理隧道：`status` 查看（含 frps 地址/远程端口/TLS/run_id），`restart`/`stop`/`start` 支持单隧道名，`reload` 免重启重扫 `frp*.toml`（新增自动启动、变更自动重启、删除自动停止）
-
-### 🔀 跨版本互通：0.11 / 0.12 / 0.13 / 0.14 / 0.15 / 0.16 同图同端口
-
-> ⚠️ **0.16（协议 90/91）已可接入，但仍有 2 个已知问题：**
-> - **0.16 生存模式在陆地上会一直显示氧气条（气泡条）**
-> - **0.16 的斜杠指令存在问题**（客户端本地校验后回显"用法"，不往服务端发包）
->
-> 除这两条外 0.16 已实测可用：创造移速正常、生物不再被拴绳、暂停菜单不重复自己、能看见其他玩家、可与 0.14 玩家同时在线、同一账号 0.14 退出后 0.16 可正常进入。
-> 详细 TODO 写在 `network/MultiProtocol.php::translateOutgoing16()` 与 `Player.php` 的 CommandStep 分支注释里。
-
-**我们支持 0.11 到 0.16 互通。** 同一个端口同时接受 **MCPE 0.11.x**（协议 21–33，实测正式版为 27）、**MCPE 0.12.x**（协议 34）、**MCPE 0.13.x**（协议 37/38/39）、**MCPE 0.14.x**（协议 45/46/60/70）、**MCPE 0.15.x**（协议 81-83）与 **MCPE 0.16.x**（协议 90/91）客户端，六类玩家在同一张地图上一起玩：
-
-- **0.11 支持（协议 21–33，family 5 翻译层，已真机实测可用）**：0.11 使用完全独立的封包 ID 空间（`0x82..0xb1`）与旧版字段布局，`MultiProtocol` 新增 family 5 全量翻译：
-  - 封包 ID 按语义映射（非偏移），如 `LOGIN 0x82→0x8f`、`BATCH 0xb1→0x92`、`TILE_EVENT 0x95→BLOCK_EVENT 0xa3`
-  - 协议号按区间识别（21–33），实测 0.11.0 正式版发的是 **协议 27**（不是 alpha 的 23），所以不能只匹配 23
-  - 登录包无 UUID/skinName：clientId 为 int32，slim 标志 1 字节，服务端自动生成随机 UUID 并推导 skinName
-  - 物品槽为旧版 5 字节格式（short id + byte count + short damage），无 NBT 长度字段
-  - `StartGamePacket` 缺少 dimension 字节与尾部字段；`ContainerOpenPacket` 缺少 entityId；`AdventureSettingsPacket` 缺少 permission 字段
-  - `SetSpawnPositionPacket` 字段顺序为 x(int), z(int), y(byte)；`BlockEntityDataPacket` 的 y 为 byte
-  - `SetTimePacket` 时间换算为 19200 制，started 按实际值映射为 0x80/0x00
-  - `AddPlayerPacket` 使用 clientID(long) 替代 UUID，携带 slim 标志与皮肤数据；`RemovePlayerPacket` 同理
-  - `PlayerListPacket` 在 0.11 不存在，出站直接丢弃
-  - **模式切换**：0.11 没有 `SetPlayerGameTypePacket`，改为重发 `StartGamePacket`（带新 gamemode）+ `AdventureSettings`，与参考端一致
-  - **创造栏**：按 0.11 官方 `initCreativeItems()` 的 **246 个 (id:meta) 精确条目**过滤；0.11 客户端校验的是 id+meta 组合，下发任意一个它不认识组合都会在打开创造背包时闪退
-  - 批量包内层为裸 [pid][payload] 拼接（无长度前缀），外层仍为 [0xb1][int len][zlib]
-  - **区块包**：`[0xaf][int x][int z][int len][裸数据]` —— 不做内层 zlib、不带 x/z 前缀，区块数据保持世界存储的列顺序（McRegion 为 `x<<11|z<<7|y`），第 256 字节字段是**高度图**（不是 biomeId，发错会导致玩家悬空坠落）
-  - 区块不走缓存，每次实时转换（0.11 载荷格式与 0.12–0.16 差异过大，复用缓存收益低）
-  - RakNet 封装无前缀（与 0.12/0.13 相同）
-  - 参考服务端：[Steadfast2](https://github.com/SteadfastMC/Steadfast2)（PocketMine-MP 0.11.0 alpha build 5 源码）
-
-- **0.12 支持（协议 34，已真机实测可用）**：0.12 与 0.13 共用同一套封包 ID（`0x8f..0xca`）与全部基元（`putSlot`/`putString`/`putUUID`/`writeMetadata` 逐字节一致），所以 0.12 只需处理 4 处差异，其余 50+ 个包零修改直通：
-  - `ContainerSetSlotPacket` 没有 0.14/0.13 插在 slot 与 item 之间的 `hotbarSlot(short)`（入站按 0.12 布局重解析、出站剥离该字段）
-  - `ChangeDimensionPacket` 写 4 字节 `int dimensionId`（0.14/0.13 写 `byte dim + byte 0`）
-  - `PlayerListPacket` TYPE_ADD 条目用 1 字节 `slim` 标志代替 0.14 的 `skinName` 字符串
-  - `CraftingDataPacket` 的 shaped 配方材料槽遍历顺序为 `(z<height, x<width)`（0.14/0.13 是 `(z<width, x<height)`，只影响非方形配方）
-- **0.12 创造栏白名单**：创造物品栏按 0.12 自己的清单（236 个 id，提取自 Prismarine-0.12 `initCreativeItems`）下发，0.12 不认识的物品一律不下发（0.12 认识的物品比 0.13 还少，参照服务端为 Prismarine-0.12）。配方表同样按 0.12 白名单过滤
-- **登录三格式嗅探**：`LoginPacket` 自动识别 0.11 旧版明文布局（int32 clientId + slim byte）、0.12/0.13/0.14 明文布局与 0.15/0.16 JWT 链（zlib + chain/skin token；0.16 多一个 gameEdition 字节且压缩长度为 varint），玩家名 / UUID / 皮肤 / 地址全部正常还原；0.13.0（协议 37）自动补齐缺失字段；0.12（协议 34）尾部是 1 字节 `slim` 标志而非 `skinName` 字符串；0.11（协议 23）无 UUID 字段，服务端自动生成
-- **封包 ID 全量重映射**：0.15.0 把全部封包 ID 从 `0x8f..0xca` 改为 `0x01..0x41`，0.16 又插入资源包握手整体偏移到 `0x01..0x4f`，`MultiProtocol` 持两张映射表按玩家协议逐个翻译
-- **0.16 全量重编码**：0.16 把基础类型全换了——字符串 varint 前缀、物品 slot 改 `varint id + varint(damage<<8|count)`、实体 ID 改 zigzag varint、坐标改 `varint x + byte y + varint z`、浮点改小端、metadata 改字典式，出站包从对象属性逐字段重编码，入站包解析回原生对象，`Player.php` 逻辑零改动
-- **0.16 资源包握手与指令表**：登录后自动补发空 `ResourcePacksInfoPacket`（我们不发资源包）；`StartGame` 之后按参考端（Genisys 0.16）的时序下发 `AvailableCommandsPacket` 指令表（JSON 结构已与参考端逐字节一致），0.16 客户端的斜杠指令走 `CommandStepPacket`，已接入指令调度（**但有上述已知问题**）
-- **字段级布局适配**：`UpdateBlockPacket`/`SetEntityMotionPacket` 在 0.15/0.16 拆为单条记录；`MoveEntityPacket` 拆分为单实体+字节旋转；`AddEntityPacket` 旋转缩放；`ChangeDimensionPacket` 补 xyz；`RemovePlayerPacket` 映射为 `RemoveEntityPacket`；0.16 配方表 varint 重编码
-- **RakNet 封装差异**：0.14 用 `0x8e` 前缀，0.15/0.16 用 `0xfe` 前缀，0.11/0.12/0.13 无前缀，出站按玩家协议分别封装
-- **批量包按协议分组**：广播/批量压缩流按 0.11/0.12/0.13/0.14/0.15/0.16 六条线路各压一份（0.11 内层为裸拼接、0.16 内层帧为 varint 长度），互不串包；入站批量包按玩家协议解析（真实 0.13 客户端会把登录包塞进 BatchPacket，已兼容）
-- **区块缓存按协议分组**：同一区块的压缩批包按线路各缓存一份（0.12/0.13 与 0.14 共用同一份，区块载荷完全相同；0.11 因格式差异过大绕过缓存走实时翻译），内存友好
-- **生物拴绳显示修复**：0.15/0.16 客户端需要 metadata 里的 `DATA_LEAD_HOLDER=-1` / `DATA_LEAD=0`（0.16 为 `DATA_LEAD_HOLDER_EID=38`），缺失时所有生物都会显示被拴着——翻译层已自动注入
-- **0.13 创造栏白名单过滤**：创造物品栏严格按 0.13 官方创造清单（245 个 id，提取自 Genisys 0.13 `initCreativeItems`）下发，0.14 新增物品（地图、漏斗、侦测器等）一律不下发 —— 否则 0.13 客户端在**新号加载地形 / 生存模式打开背包**时会直接闪退
-- **0.13 创造取物快速路径**：0.13 创造模式取物走 `ContainerSetSlotPacket` 直改背包（与 Genisys 0.13 行为一致），绕开交易组校验（交易组会拒绝 `source=air` 的创造取物导致拿不出东西）
-- **MOTD 保持 0.14 原生公告**（协议 70），0.11/0.12/0.13/0.15/0.16 客户端直接连即可（与 axe.ink 同款方案）
-
-> 注：0.13.0（协议 37）因客户端登录包缺字段会被判为无效皮肤（与原版 Genisys 0.13 行为一致），请使用 **0.13.1 / 0.13.2**。0.16 暂不支持地图物品数据包（MPApi 地图功能对 0.16 客户端自动降级为不发送）。
->
-> 0.16 剩余问题追踪：**① 生存模式陆地上的氧气条** —— 参考端（Genisys 0.16）给玩家的 metadata 只发 nametag、完全不发 `DATA_AIR`/`DATA_MAX_AIR`，我们已同样跳过，但真机仍显示，待进一步定位；**② 指令** —— 服务器链路正常（模拟器发 CommandStep 后客户端能收到 `SetPlayerGameType`）、指令表 JSON 已与参考端一致，真机仍被客户端本地拦截，待真机抓 `0x4b`/`0x4c` 原始字节继续排查
-
-> 参考服务端：0.11 的对照基于 **Steadfast2**（PocketMine-MP 0.11.0 alpha build 5 源码，<https://github.com/SteadfastMC/Steadfast2>）；0.12 的字段差异对照基于 **Prismarine-0.12**（对照官方 `MCPE_0.12.1.apk` 逐字段比对）；0.16 的对照基于 Genisys 0.16。
-
-### 🚀 深度性能优化（磁盘 I/O · 内存 · CPU · 事件）
-
-- **磁盘 I/O**：
-  - 日志写盘改为**持久句柄 + 64KB 缓冲批量写**，替代原来每行日志一次 open/write/close
-  - RegionLoader 流缓冲区 16KB → **256KB**，区块读写 syscall 大幅减少
-  - 区块保存写入改用共享零块补齐扇区，省去每次保存一次全尺寸 `str_pad` 字符串复制
-- **内存**：
-  - 区块数据包缓存上限 768 → 256、方块对象缓存 2048 → 1024（每世界省约 20MB 峰值）
-  - 区块卸载批量 96 → 256/tick，低内存时回收更快
-  - 修复 `disable-log` 时日志队列无限增长的泄漏；修复关机时日志线程无法退出、尾部日志丢失的问题
-- **CPU**：
-  - 碰撞检测（`getCollisionCubes` / `getEntityCollidingBlocks`）先用共享实例做常量预检，**普通方块不再每次克隆 Block 对象**
-  - 实体运动更新内联长度计算、碰撞检测复用实体暂存向量，每实体每 tick 省多次对象分配
-  - 日志格式化重构：单次 `clean()` + 按需 `toANSI()`
-  - 实体/Tile 的 Timings 短类名改为字符串截取，去掉每次实体生成的 `ReflectionClass` 分配
-- **事件快速路径**：
-  - 新增 `Event::hasHandlers()` 静态方法；封包收发（×4）、`PlayerMoveEvent`、`EntityMotionEvent` 在**无插件监听时零分配跳过**，有插件监听时事件语义逐字节一致（完全插件兼容）
-
-### 🛡️ 安全防护机制
-
-- **畸形 BatchPacket 死循环修复**：内层封包长度字段原来不做校验，攻击者构造负数长度（如 -4）可让主线程**永久死循环**；现已增加长度合法性检测，发现即**临时封禁该 IP 300 秒**并踢出玩家（正规客户端永不触发，无误伤）
-- **MOTD 探测洪水限流**：`UNCONNECTED_PING` 按 **5 秒滑窗**统计，窗口内超过 40 次即**临时封禁该 IP 120 秒**（本地 UDP 与 frp 喂包两条路径均生效）
-- **假人攻击拦截**：同一 IP 进入第 N 个账号（默认第 3 个）时，**踢出该 IP 全部已在线账号 + 临时封禁该 IP 300 秒**，新连接一并拒绝；IP 经 PROXY v2 还原，走 frp 也无法伪装
-  - `genisys.yml` 可调：`server.max-accounts-per-ip: 3`（0 = 关闭）、`server.accounts-per-ip-ban-time: 300`
-
-### 🛠️ 漏斗 / 漏斗矿车 修复与增强
-
-- **Hopper（固定漏斗）**：
-  - 新增 `findFirstItem()` 通用取物方法，**不依赖 `firstOccupied()`**，兼容所有 `BaseInventory` 子类（箱子、熔炉、发射器等）
-  - 每 tick 仅吸 **1 个掉落物**，防止一 tick 吞掉整堆
-  - **已修复并排漏斗刷物 bug**：两个并排放置的漏斗同时拾取同一掉落物的问题，通过在拾取循环中增加 `isAlive` / `closed` 检查修复
-  - 红石锁定：`isPowered` 为 true 时暂停传输
-  - 8 tick 传输冷却，`transferCooldown` 纯 PHP 属性避免 NBT 序列化 NPE
-
-- **MinecartHopper（漏斗矿车）**：
-  - 实体 ID 96，自动吸取上方容器/掉落物、向下方容器推送
-  - 移动中同样工作，支持 NBT 持久化 `TransferCooldown`
-  - 已注册实体网络 ID，客户端可正常显示
-
-#### 🐛 已知问题
-
-- **地图客户端崩溃**：玩家手持填充地图（Filled Map）时，客户端会崩溃。该问题在引入 FRP 直接喂包（frpc → RakNet）特性时出现，目前在局域网和 FRP 两种连接方式下均能复现。SCAXE 原版核心无此问题，已对比 RakNet 层代码但尚未定位到根因。
-
-### 🎮 其他特性
-
-- **Enderman 传送音效**：传送门触发、末影人传送均播放 `EndermanTeleportSound`
-- **末地时间锁定**：`ender` 维度时间永远锁定为夜晚（`Level::TIME_NIGHT`）
-- **Synapse API 预留**：`synapse.enabled` 支持跨服通信（需外部 Synapse 服务端）
-- **多服统一查询**：`dserver` 支持多服务器 Motd/Query 聚合
-- **JSON 配方/创造物品表**：`recipes-from-json`、`creative-items-from-json` 可选读取外部 JSON
-
-## 原版建筑移植（MCP-Reborn 26.2）
-
-已导入 **1,212 个建筑模板、188 个拼图池**，包含五类村庄、僵尸村庄、掠夺者前哨站、末地城/船、林地府邸、堡垒遗迹、远古城市、试炼密室、沉船、海底废墟等。主世界、地狱、末地的新区块按种子自然生成；旧地图已生成区块保留。末地外岛已补齐。
-
-- `/structure list` 查看类型；`/locate village` 或 `/locate structure minecraft:village` 后台搜索并证明最近村庄，兼容 `/structure locate`。
-- `/tp Steve world ender 100 49 0` 跨世界传送，保留旧版玩家互传、坐标和相对坐标语法；详见 [传送指令说明](docs/TELEPORT.md)。
-- 默认末地名为 `ender`，新建时继承主世界种子；已有末地不会自动重建。源码对照、升级提示和已知限制见 [26.2 末地说明](docs/END_26_2.md)。
-- `/structure place village 100 70 100 snowy` 手动放置雪地村庄；也可指定模板完整路径。
-- `genisys.yml` 的 `structures` 控制总开关和各类型间距。
-- 旧版不存在的方块使用记录在案的替代材质；无模板的神殿、要塞等采用有界程序化适配。新版掠夺者 AI、袭击、传送门功能和部分战利品并未一并移植。
-
-完整范围、限制、测试结果与命令见 [建筑移植说明](STRUCTURES.md)。
-
-![建筑几何预览（离线模型，非客户端截图）](docs/structure-preview.png)
-
-## 运行环境要求
-
-- 需要开启了 **ZTS**（Zend 线程安全）的 **PHP 8.4**，并装有 `pmmpthread` 扩展
-- 所需扩展：`sockets`、`curl`、`yaml`、`sqlite3`、`zlib`
-- 需要与目标协议匹配的 Minecraft: 基岩版客户端
-
-### PHP 二进制文件
-
-可从官方 pmmp 二进制仓库下载预编译的 PHP：
-
-**https://github.com/pmmp/PHP-Binaries**
-
-> 请使用 **PHP 8.4** —— 这是目前唯一验证过可运行 MPMPESCore 的版本（需 ZTS + pmmpthread 6.x）。
-
-`bin/` 目录**不在仓库内**（见 `.gitignore`），需要自己下载 PHP-Binaries 解压到项目根目录：
-
-- Linux / macOS：解压后为 `bin/php7/bin/php`（`start.sh` 默认使用该路径）
-- Windows：解压后为 `bin/php/php.exe`（`start.cmd` 默认使用该路径）
-
-下载的构建需包含 `pmmpthread` 6.x 扩展，否则无法启动。
-
-## 如何运行
+### 2. 获取源码并启动
 
 ```bash
+git clone https://github.com/mpmp666/MPMPESCore.git
+cd MPMPESCore
+
+# 先将匹配的 PHP 运行时放入 bin/，再启动
 ./start.sh
 ```
 
-Windows 下双击 `start.cmd` 即可。
-
-或者直接用命令运行：
+Windows 配置好 PHP 后运行 `start.cmd`。也可以在项目根目录直接启动源码入口：
 
 ```bash
 # Linux / macOS
 ./bin/php7/bin/php ./src/pocketmine/PocketMine.php
+```
 
+```powershell
 # Windows
 bin\php\php.exe -c bin\php src\pocketmine\PocketMine.php
 ```
 
-首次运行会生成 `server.properties`、`pocketmine.yml` 和 `genisys.yml`，按需修改后重启即可。
+### 3. 配置并连接
 
-## 指令
+首次运行会生成 `server.properties`、`pocketmine.yml` 和 `genisys.yml`。按需修改后重启，在客户端添加服务器地址及端口；默认游戏端口是 **UDP 19132**，公网直连时需放行对应 UDP 端口。
 
-- `ver` / `version` / `about` —— 显示核心名称、版本、API 版本、PHP 版本、**MPApi 版本**
-- `status` —— 显示 TPS / 在线玩家数
-- `frp` —— 内置 frp 隧道管理（仅 OP/控制台）：`/frp [status|start|restart|stop|reload] [隧道名]`
-- 支持标准的 PocketMine / Genisys 指令
+| 文件 | 主要用途 |
+| --- | --- |
+| `server.properties` | 服务器名称、端口、人数、游戏模式、主世界等 |
+| `pocketmine.yml` | PocketMine 基础配置 |
+| `genisys.yml` | 维度、建筑、AI 与附魔相关设置，以及核心增强功能 |
+| `frp.toml` / `frp_<名字>.toml` | 可选的内置 frp 隧道配置，需要可连接的 frps 服务端 |
 
-## 许可证
+> **更新已有服务器：**先备份配置、世界、玩家数据和插件。运行时配置与存档不在 Git 跟踪范围内；新建筑只出现在新填充区块，已有末地不会自动重建。升级方式见 [26.2 适配与升级说明](docs/RELEASE_26_2.md)。
 
-MPMPESCore 衍生自 Genisys，Genisys 采用 **LGPL** 许可。MPMPESCore 以相同的 LGPL 许可分发。
+## 核心功能
 
-## 致谢
+### 多维度与建筑生成
 
-- PocketMine-MP 团队
-- iTX Technologies LLC（Genisys）
-- pmmp / pmmpthread 团队
-- mpmpes（MPMPESCore 的修改）
+| 维度 | 生成器 | 主要内容 |
+| --- | --- | --- |
+| 主世界 | `Normal` | 生态群系、洞穴与建筑 |
+| 地狱 | `Nether` | 石英矿、辉石、熔岩湖、地狱要塞 |
+| 星界 | `Astral` | 末地石浮岛、按种子分布的小荧石岛，无黑曜石柱 |
+| 末地 | `Ender` | 参考 26.2 的基础噪声、主岛、外岛、黑曜石柱与末地城布局 |
 
-感谢所有为 MPMPESCore 所基于项目做出贡献的人。
+通过 `genisys.yml` 中的 `nether.allow-nether`、`astral.allow-astral` 和 `ender.allow-ender` 独立开关维度，使用各自的 `level-name` 自定义世界名。
+
+建筑资源包含 **1,212 个模板与 188 个拼图池**，覆盖五类村庄、末地城、林地府邸、堡垒遗迹、远古城市、试炼密室、沉船等。支持按种子自然生成、`/locate` 定位与 `/structure` 手动放置；平坦和星界生成器不自动生成这些建筑。
+
+![八类建筑的离线方块几何预览：村庄、前哨站、末地城、林地府邸、堡垒遗迹、远古城市、试炼密室与沉船](docs/structure-preview.png)
+
+*上图根据实际放置顺序与方块数据离线渲染，用于展示几何及旧版替代材质，**不是游戏客户端截图**。*
+
+旧世界高度仍为 **Y0–127**；新版材质与部分实体采用旧版可表示内容适配。袭击、试炼机制、末影龙战斗、鞘翅飞行等并未随建筑一并移植。详见 [建筑范围与限制](STRUCTURES.md) 和 [末地生成说明](docs/END_26_2.md)。
+
+### 生物 AI 与附魔
+
+- **26 类现有生物**接入共享行为与有界导航，包含视线、仇恨、受击响应、食物引诱/繁殖及类别差异。
+- **25 个旧版附魔 ID（0–24）**保留，参考 26.2 修正规则、附魔台/铁砧费用及战斗、工具、弓箭和钓鱼效果。
+- 村民现代 Brain、新生物与全部新机制仍未完整移植；客户端菜单与操作顺序仍需逐版本真机验证。
+
+配置与使用见 [AI / 附魔中文说明](docs/AI_ENCHANT_26_2_使用说明.md)，具体范围见 [AI 覆盖清单](docs/AI_26_2.md) 和 [附魔规则](docs/ENCHANTMENTS_26_2.md)。
+
+### MPApi 1.1 插件接口
+
+提供原始方块读写、碰撞与实体查询、高度图、AI 控制、玩家协议及真实地址、frp 隧道控制、动态地图等接口。原始方块接口可避免分配 `Block` 对象、污染方块缓存或触发区块加载，适合批量处理。
+
+在插件的 `plugin.yml` 中声明：
+
+```yaml
+mpapi: "1.1"
+```
+
+插件要求的 MPApi 版本高于服务端版本时会被禁用。接口入口见 [`MPApi.php`](src/pocketmine/mpapi/MPApi.php)，方法概览见 [技术说明](docs/TECHNICAL_NOTES.md)。地图媒体能力请同时参考上方的已知问题。
+
+### 内置 frp、性能与玩法修复
+
+- **frp 隧道：**纯 PHP 客户端与服务端同进程运行，支持多隧道、单隧道控制、免重启重扫配置及 PROXY v2 真实地址还原；仍需外部 frps 服务端。
+- **性能优化：**日志缓冲写入、Region I/O 缓冲、区块与方块缓存调整、碰撞查询及无监听事件快速路径。
+- **连接防护：**畸形 BatchPacket 长度检测、MOTD 探测限流和同 IP 账号数限制。
+- **玩法修复：**漏斗与漏斗矿车传输、并排漏斗重复拾取、红石锁定、末影人传送音效与末地时间锁定。
+- **其他接口：**Synapse 对接预留（需要外部服务端）、dserver 多服查询，以及可选 JSON 配方/创造物品表。
+
+配置项、接口方法与实现细节统一收录于 [功能与协议技术说明](docs/TECHNICAL_NOTES.md)。
+
+## 常用指令
+
+以下以游戏内格式展示；**控制台输入时去掉开头的 `/`**。管理类指令需要 OP 或对应权限。
+
+| 指令 | 用途 |
+| --- | --- |
+| `/version` | 查看核心、PHP、API 与 MPApi 版本；也可用 `/ver`、`/about` |
+| `/status` | 查看 TPS 与在线人数 |
+| `/frp status` | 查看隧道状态 |
+| `/frp [start\|restart\|stop\|reload] [隧道名]` | 管理隧道；`reload` 重扫根目录配置 |
+| `/structure list` | 查看支持的建筑类型 |
+| `/locate village` | 搜索最近村庄；已有旧区块不保证包含预测建筑 |
+| `/structure place village 100 70 100 snowy` | 手动放置雪地村庄，会改写目标区域 |
+| `/tp Steve world ender 100 49 0` | 将 Steve 传送到已加载的末地世界坐标 |
+
+更多语法见 [建筑命令](STRUCTURES.md#命令) 与 [传送指令说明](docs/TELEPORT.md)。
+
+## 文档导航
+
+| 文档 | 内容 |
+| --- | --- |
+| [26.2 适配与升级](docs/RELEASE_26_2.md) | 变更范围、升级注意事项与完整验证命令 |
+| [功能与协议技术说明](docs/TECHNICAL_NOTES.md) | 各版本翻译细节、MPApi、frp、性能与玩法修复 |
+| [建筑移植说明](STRUCTURES.md) | 模板范围、配置、材质映射与机制边界 |
+| [末地生成与定位](docs/END_26_2.md) | 噪声、末地城、升级与源码对照验证 |
+| [AI / 附魔中文使用说明](docs/AI_ENCHANT_26_2_使用说明.md) | 配置、操作与旧协议差异 |
+| [生物 AI 覆盖清单](docs/AI_26_2.md) | 生物类别、行为与导航边界 |
+| [附魔规则](docs/ENCHANTMENTS_26_2.md) | 等级、适用物品、互斥与效果 |
+| [传送指令](docs/TELEPORT.md) | 跨世界、玩家互传、坐标与相对坐标 |
+| [图标与配图源文件](docs/assets/README.md) | SVG / PNG 素材及重绘方式 |
+
+## 开发与验证
+
+配置好项目 PHP 后，可先运行资源与基础建筑检查：
+
+```bash
+python3 -B tools/test_structure_resources.py
+python3 -B tools/structure_import/test_import.py
+./bin/php7/bin/php tools/test_structures.php
+```
+
+完整末地、定位、传送、AI、附魔回归及独立临时服务器测试见 [验证说明](docs/RELEASE_26_2.md#验证)。这些检查与已有真机记录的覆盖范围不同；本 README 的品牌插画、协议示意图和建筑离线预览均不作为客户端画面验收证据。
+
+反馈问题时，请附上**客户端版本/协议、PHP 版本与扩展、连接方式（直连或 frp）、复现步骤及相关日志**，并隐去配置中的密钥。
+
+<details>
+<summary>关于 AI 协作开发</summary>
+
+项目采用 AI 生成 / 协作开发方式。原 README 记录的参与模型如下，保留用于说明项目开发方式：
+
+- DeepSeek v4 Flash 0731
+- Hy3
+- MiniMax M3
+- Nemotron 3 Ultra
+- GLM-5.3-Flash
+- MiMo V2.5 Free
+- Kimi K3
+- Hy4 preview
+- DeepSeek V4.1 Flash
+
+</details>
+
+## 许可证与致谢
+
+MPMPESCore 衍生自 Genisys，以 **GNU LGPL v3 或更高版本**分发，详见 [LICENSE.LESSER](LICENSE.LESSER) 与 [LICENSE](LICENSE)。建筑转换资源的来源与权利归属见 [建筑移植说明](STRUCTURES.md#方块容器和机制边界)，项目许可不改变原始资源的权利归属。
+
+感谢 **PocketMine-MP 团队**、**iTX Technologies LLC / Genisys**、**pmmp / pmmpthread 团队**及 **mpmpes**。本项目为社区修改构建，与 Mojang、Microsoft 无官方关联。

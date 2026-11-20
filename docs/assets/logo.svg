@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">MPMPESCore icon</title>
+<desc id="desc">An extruded mint M linked to six client nodes on a dark square.</desc>
+<defs>
+  <linearGradient id="background" x2="1" y2="1">
+    <stop stop-color="#102b31"/><stop offset="1" stop-color="#09171e"/>
+  </linearGradient>
+  <linearGradient id="face" x2="1" y2="1">
+    <stop stop-color="#9af5c6"/><stop offset="1" stop-color="#4dc5b5"/>
+  </linearGradient>
+  <radialGradient id="halo">
+    <stop stop-color="#225a55" stop-opacity=".65"/>
+    <stop offset="1" stop-color="#225a55" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+<rect x="1" y="1" width="510" height="510" rx="108" fill="url(#background)" stroke="#26494f"/><circle cx="270" cy="246" r="228" fill="url(#halo)"/><g transform="translate(0 0) scale(1)"><path d="M64 146 H112" fill="none" stroke="#30565b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><rect x="59" y="141" width="10" height="10" rx="2" fill="#82efbf" stroke="none"/><path d="M64 256 H112" fill="none" stroke="#30565b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><rect x="59" y="251" width="10" height="10" rx="2" fill="#82efbf" stroke="none"/><path d="M64 366 H112" fill="none" stroke="#30565b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><rect x="59" y="361" width="10" height="10" rx="2" fill="#82efbf" stroke="none"/><path d="M448 146 H400" fill="none" stroke="#30565b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><rect x="443" y="141" width="10" height="10" rx="2" fill="#82efbf" stroke="none"/><path d="M448 256 H400" fill="none" stroke="#30565b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><rect x="443" y="251" width="10" height="10" rx="2" fill="#82efbf" stroke="none"/><path d="M448 366 H400" fill="none" stroke="#30565b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><rect x="443" y="361" width="10" height="10" rx="2" fill="#82efbf" stroke="none"/><path d="M116 158 L144 134 H198 L170 158 Z" fill="#d5ffe6" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M170 158 L198 134 L284 234 L256 258 Z" fill="#a1f0cd" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M256 258 L284 234 L370 134 L342 158 Z" fill="#36a899" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M342 158 L370 134 H424 L396 158 Z" fill="#d5ffe6" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M396 158 L424 134 V342 L396 366 Z" fill="#2896a4" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M172 366 L200 342 V280 L172 248 Z" fill="#2896a4" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M116 366 V158 H170 L256 258 L342 158 H396 V366 H340 V248 L256 342 L172 248 V366 Z" fill="url(#face)" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M116 158 H170 L256 258 L342 158 H396" fill="none" stroke="#c4ffe2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></g>
+</svg>
